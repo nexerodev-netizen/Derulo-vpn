@@ -1,0 +1,33 @@
+name: Collect VLESS Configs
+
+on:
+  workflow_dispatch:
+
+jobs:
+  collect-configs:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+      
+      - name: Download and merge VLESS configs
+        run: |
+          > sub.txt
+          echo "# Epodonios v2ray-configs" >> sub.txt
+          for i in {1..10}; do
+            curl -s "https://raw.githubusercontent.com/Epodonios/v2ray-configs/main/Sub${i}.txt" >> sub.txt 2>/dev/null || true
+          done
+          echo "# MatinGhanbari v2ray-configs" >> sub.txt
+          curl -s "https://raw.githubusercontent.com/MatinGhanbari/v2ray-configs/main/subscriptions/filtered/subs/vless.txt" >> sub.txt
+          echo "# igareck configs" >> sub.txt
+          curl -s "https://raw.githubusercontent.com/igareck/vpn-configs-for-russia/main/BLACK_VLESS_RUS.txt" >> sub.txt
+          curl -s "https://raw.githubusercontent.com/igareck/vpn-configs-for-russia/main/BLACK_VLESS_RUS_mobile.txt" >> sub.txt
+      
+      - name: Commit and push
+        run: |
+          git config user.email "action@github.com"
+          git config user.name "GitHub Action"
+          git add sub.txt
+          git commit -m "🔄 Update VLESS configs" || echo "No changes"
+          git push
