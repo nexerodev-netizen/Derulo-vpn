@@ -1,40 +1,138 @@
-name: Collect VLESS Configs
+name: Update VLESS Aggregator
 
 on:
   workflow_dispatch:
-
-# ✅ Добавлен блок permissions
-permissions:
-  contents: write
+  schedule:
+    - cron: '0 */6 * * *'
 
 jobs:
-  collect-configs:
+  update-configs:
     runs-on: ubuntu-latest
-    
+    permissions:
+      contents: write
+
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          # ✅ Явно указываем использование токена для записи
-          token: ${{ secrets.GITHUB_TOKEN }}
-      
-      - name: Download and merge VLESS configs
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Run VLESS Parser and Checker
         run: |
-          > sub.txt
-          echo "# Epodonios v2ray-configs" >> sub.txt
-          for i in {1..10}; do
-            curl -s "https://raw.githubusercontent.com/Epodonios/v2ray-configs/main/Sub${i}.txt" >> sub.txt 2>/dev/null || true
-          done
-          echo "# MatinGhanbari v2ray-configs" >> sub.txt
-          curl -s "https://raw.githubusercontent.com/MatinGhanbari/v2ray-configs/main/subscriptions/filtered/subs/vless.txt" >> sub.txt
-          echo "# igareck configs" >> sub.txt
-          curl -s "https://raw.githubusercontent.com/igareck/vpn-configs-for-russia/main/BLACK_VLESS_RUS.txt" >> sub.txt
-          curl -s "https://raw.githubusercontent.com/igareck/vpn-configs-for-russia/main/BLACK_VLESS_RUS_mobile.txt" >> sub.txt
-      
-      - name: Commit and push
+          cat << 'EOF' > parser.py
+          import requests
+          import urllib.parse
+          import socket
+
+          SOURCES = [
+              "https://cdn.jsdelivr.net/gh/luxxuria/harvester@main/ping_tested.txt",
+              "https://raw.githubusercontent.com/bobrinaw/vlessforu/refs/heads/main/working_configs.txt"
+          ]
+
+          def has_flag_emoji(text):
+              for char in text:
+                  if '\U0001F1E6' <= char <= '\U0001F1FF':
+                      return True
+              return False
+
+          def check_port_alive(address, port, timeout=2):
+              try:
+                  sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                  sock.settimeout(timeout)
+                  result = sock.connect_ex((address, port))
+                  sock.close()
+                  return result == 0
+              except Exception:
+                  return False
+
+          def process_vless_aggregator():
+              lte_servers = []
+              normal_servers = []
+              
+              print("Starting VLESS aggregation and validation...")
+              
+              for url in SOURCES:
+                  try:
+                      print(f"Fetching: {url}")
+                      response = requests.get(url, timeout=10)
+                      response.raise_for_status()
+                      lines = response.text.splitlines()
+                      
+                      for line in lines:
+                          line = line.strip()
+                          if not line.startswith("vless://"):
+                              continue
+                          
+                          try:
+                              if '#' in line:
+                                  base_part, fragment = line.rsplit('#', 1)
+                                  original_name = urllib.parse.unquote(fragment)
+                              else:
+                                  continue
+                              
+                              if not has_flag_emoji(original_name):
+                                  continue
+                              
+                              user_info, _, rest = base_part[8:].partition('@')
+                              address_port, _, _ = rest.partition('?')
+                              address, port_str = address_port.split(':')
+                              port = int(port_str)
+                              
+                              if not check_port_alive(address, port):
+                                  continue
+
+                              if "LTE" in original_name.upper():
+                                  lte_servers.append(line)
+                              else:
+                                  flags = "".join([c for c in original_name if '\U0001F1E6' <= c <= '\U0001F1FF'])
+                                  final_name = f"Hello team❤️ {flags}"
+                                  new_name_encoded = urllib.parse.quote(final_name)
+                                  new_line = f"{base_part}#{new_name_encoded}"
+                                  normal_servers.append(new_line)
+                                  
+                          except Exception:
+                              continue
+                              
+                  except Exception as e:
+                      print(f"Source error {url}: {e}")
+
+              final_list = lte_servers + normal_servers
+              
+              header = [
+                  "# profile-title: InfinityX VPN",
+                  "# profile-update-interval: 1",
+                  ""
+              ]
+              
+              output_content = "\n".join(header + final_list)
+              
+              with open("vless.txt", "w", encoding="utf-8") as f:
+                  f.write(output_content)
+
+              print(f"Done! Total valid servers: {len(final_list)}")
+              print(f"LTE: {len(lte_servers)}, Normal: {len(normal_servers)}")
+
+          if __name__ == "__main__":
+              process_vless_aggregator()
+          EOF
+          python3 parser.py
+
+      - name: Commit and Push changes
         run: |
-          git config user.email "action@github.com"
-          git config user.name "GitHub Action"
-          git add sub.txt
-          git commit -m "🔄 Update VLESS configs" || echo "No changes"
-          git push
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          git add vless.txt
+          
+          if git diff --staged --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "🔄 Auto-update: Refreshed VLESS configs"
+            git push
+          fi
