@@ -1,250 +1,256 @@
-name: Update VLESS Aggregator
+name: Aggregate hello-team subs JSON
 
 on:
-  workflow_dispatch:
   schedule:
     - cron: '0 */6 * * *'
+  workflow_dispatch:
 
 jobs:
-  update-configs:
+  aggregate-json:
     runs-on: ubuntu-latest
     permissions:
       contents: write
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
+      - name: Install tools
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq python3-pip > /dev/null 2>&1
 
-      - name: Install dependencies
-        run: pip install requests
-
-      - name: Run VLESS Parser and JSON Generator
+      - name: Generate Config
         run: |
-          cat << 'EOF' > parser.py
+          pip install requests > /dev/null 2>&1
+          
+          cat << 'PYEOF' > gen.py
           import requests
           import urllib.parse
           import json
           import re
-          import uuid
+          import socket
+          import time
+          from concurrent.futures import ThreadPoolExecutor, as_completed
 
           SOURCES = [
               "https://cdn.jsdelivr.net/gh/luxxuria/harvester@main/ping_tested.txt",
               "https://raw.githubusercontent.com/bobrinaw/vlessforu/refs/heads/main/working_configs.txt"
           ]
 
-          def has_flag_emoji(text):
+          # Карта флагов для определения страны
+          FLAG_MAP = {
+              "DE": "🇩🇪", "NL": "🇳🇱", "FR": "🇫🇷", "US": "🇺🇸", "GB": "🇬🇧", 
+              "RU": "🇷🇺", "JP": "🇯🇵", "SG": "🇸🇬", "KR": "🇰🇷", "CA": "🇨🇦",
+              "AU": "🇦🇺", "BR": "🇧🇷", "IN": "🇮🇳", "IT": "🇮🇹", "ES": "🇪🇸",
+              "PL": "🇵🇱", "SE": "🇸🇪", "NO": "🇳🇴", "DK": "🇩🇰", "CH": "🇨🇭",
+              "AT": "🇦🇹", "BE": "🇧🇪", "PT": "🇵🇹", "IE": "🇮🇪", "CZ": "🇨🇿",
+              "RO": "🇷🇴", "HU": "🇭🇺", "GR": "🇬🇷", "BG": "🇧🇬", "HR": "🇭🇷",
+              "SK": "🇸🇰", "SI": "🇸🇮", "LT": "🇱🇹", "LV": "🇱🇻", "EE": "🇪🇪",
+              "UA": "🇺🇦", "MD": "🇲🇩", "RS": "🇷🇸", "BA": "🇧🇦", "ME": "🇲🇪",
+              "MK": "🇲🇰", "AL": "🇦🇱", "IL": "🇮🇱", "TR": "🇹🇷", "AE": "🇦🇪",
+              "SA": "🇸🇦", "QA": "🇶🇦", "KW": "🇰🇼", "OM": "🇴🇲", "BH": "🇧🇭",
+              "JO": "🇯🇴", "LB": "🇱🇧", "TH": "🇹🇭", "VN": "🇻🇳", "MY": "🇲🇾",
+              "ID": "🇮🇩", "PH": "🇵🇭", "TW": "🇹🇼", "HK": "🇭🇰", "ZA": "🇿🇦",
+              "NG": "🇳🇬", "KE": "🇰🇪", "AR": "🇦🇷", "CL": "🇨🇱", "CO": "🇨🇴",
+              "PE": "🇵🇪", "MX": "🇲🇽", "FI": "🇫🇮"
+          }
+
+          def has_flag(text):
               return bool(re.search(r'[\U0001F1E6-\U0001F1FF]{2}', text))
 
           def get_flag_from_name(name):
               match = re.search(r'([\U0001F1E6-\U0001F1FF]{2})', name)
-              if match:
-                  return match.group(1)
-              return "🏳️"
+              return match.group(1) if match else "🏳️"
 
-          def parse_vless_to_outbound(line, tag_prefix="proxy"):
+          def detect_country_code(name):
+              # Простая эвристика по названию, если флага нет, но тут мы полагаемся на флаг
+              return None
+
+          def check_port_alive(address, port, timeout=2):
               try:
-                  # vless://uuid@host:port?params#name
+                  sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                  sock.settimeout(timeout)
+                  result = sock.connect_ex((address, port))
+                  sock.close()
+                  return result == 0
+              except:
+                  return False
+
+          def parse_vless(line):
+              try:
                   if '#' in line:
                       base_part, fragment = line.rsplit('#', 1)
                       original_name = urllib.parse.unquote(fragment)
                   else:
                       return None
                   
-                  body = base_part[8:] # remove vless://
+                  if not has_flag(original_name):
+                      return None
+
+                  body = base_part[8:]
                   user_host, _, rest = body.partition('@')
                   uuid_val = user_host
                   host_params, _, _ = rest.partition('#')
-                  
                   address_port, _, query_string = host_params.partition('?')
-                  address, port = address_port.split(':')
-                  port = int(port)
+                  address, port_str = address_port.split(':')
+                  port = int(port_str)
                   
                   params = dict(urllib.parse.parse_qsl(query_string))
                   
-                  # Determine security and settings
-                  security = params.get('security', 'none')
-                  flow = params.get('flow', '')
-                  sni = params.get('sni', address)
-                  fp = params.get('fp', 'random')
+                  is_lte = "LTE" in original_name.upper()
                   
+                  # Определяем страну по флагу в имени
+                  flag = get_flag_from_name(original_name)
+                  # Находим код страны по флагу (обратный поиск)
+                  cc = None
+                  for code, f in FLAG_MAP.items():
+                      if f == flag:
+                          cc = code
+                          break
+                  if not cc: cc = "XX"
+
                   outbound = {
-                      "tag": f"{tag_prefix}-{original_name}", # Уникальный тег
                       "protocol": "vless",
                       "settings": {
-                          "vnext": [
-                              {
-                                  "address": address,
-                                  "port": port,
-                                  "users": [
-                                      {
-                                          "id": uuid_val,
-                                          "encryption": "none",
-                                          "flow": flow
-                                      }
-                                  ]
-                              }
-                          ]
+                          "vnext": [{
+                              "address": address,
+                              "port": port,
+                              "users": [{"id": uuid_val, "encryption": "none", "flow": params.get('flow', '')}]
+                          }]
                       },
                       "streamSettings": {
                           "network": params.get('type', 'tcp'),
-                          "security": security
+                          "security": params.get('security', 'none')
                       }
                   }
                   
-                  # Add TLS/Reality settings
-                  if security == 'reality':
+                  # Добавляем TLS/Reality
+                  sec = params.get('security', 'none')
+                  if sec == 'reality':
                       outbound["streamSettings"]["realitySettings"] = {
                           "serverName": params.get('sni', ''),
                           "publicKey": params.get('pbk', ''),
                           "shortId": params.get('sid', ''),
-                          "fingerprint": fp
+                          "fingerprint": params.get('fp', 'random')
                       }
-                  elif security == 'tls':
+                  elif sec == 'tls':
                       outbound["streamSettings"]["tlsSettings"] = {
-                          "serverName": sni,
-                          "fingerprint": fp
+                          "serverName": params.get('sni', address),
+                          "fingerprint": params.get('fp', 'random')
                       }
                       
-                  # Add Transport settings
-                  net_type = params.get('type', 'tcp')
-                  if net_type == 'ws':
+                  # Transport
+                  net = params.get('type', 'tcp')
+                  if net == 'ws':
                       outbound["streamSettings"]["wsSettings"] = {
                           "path": params.get('path', '/'),
-                          "headers": {
-                              "Host": params.get('host', '')
-                          }
+                          "headers": {"Host": params.get('host', '')}
                       }
-                  elif net_type == 'grpc':
+                  elif net == 'grpc':
                       outbound["streamSettings"]["grpcSettings"] = {
                           "serviceName": params.get('serviceName', '')
                       }
-                  elif net_type == 'xhttp': # or httpupgrade etc
-                       outbound["streamSettings"]["httpSettings"] = {
-                          "path": params.get('path', '/'),
-                          "host": [params.get('host', '')]
-                      }
 
-                  return outbound, original_name
-              
+                  return {
+                      "outbound": outbound,
+                      "is_lte": is_lte,
+                      "original_name": original_name,
+                      "flag": flag,
+                      "cc": cc,
+                      "address": address,
+                      "port": port
+                  }
               except Exception as e:
-                  # print(f"Error parsing: {e}")
-                  return None, None
+                  return None
 
-          def process_vless_aggregator():
-              normal_outbounds = []
-              lte_outbounds = []
-              country_map = {} # flag -> list of tags
-              
-              all_tags_for_balancer = []
-
+          def process():
+              all_servers = []
+              print("Fetching sources...")
               for url in SOURCES:
                   try:
-                      response = requests.get(url, timeout=15)
-                      response.raise_for_status()
-                      lines = response.text.splitlines()
-                      
-                      for line in lines:
+                      r = requests.get(url, timeout=10)
+                      for line in r.text.splitlines():
                           line = line.strip()
-                          if not line.startswith("vless://"):
-                              continue
-                          
-                          if not has_flag_emoji(line):
-                              continue
-                              
-                          is_lte = "LTE" in line.upper()
-                          outbound, original_name = parse_vless_to_outbound(line)
-                          
-                          if not outbound:
-                              continue
-                              
-                          flag = get_flag_from_name(original_name)
-                          
-                          # Clean up tag name for readability but keep it unique
-                          clean_tag_name = f"{flag} Server"
-                          if is_lte:
-                              clean_tag_name = f"⚡ LTE {flag}"
-                              
-                          # Make tag unique by appending a short hash or counter if needed, 
-                          # but for balancer selector we need consistent prefixes.
-                          # Let's use a simple index to ensure uniqueness in JSON
-                          idx = len(normal_outbounds) + len(lte_outbounds)
-                          final_tag = f"srv-{idx}-{clean_tag_name.replace(' ', '_')}"
-                          outbound["tag"] = final_tag
-                          
-                          if is_lte:
-                              lte_outbounds.append(outbound)
-                          else:
-                              normal_outbounds.append(outbound)
-                              all_tags_for_balancer.append(final_tag)
-                              
-                              if flag not in country_map:
-                                  country_map[flag] = []
-                              country_map[flag].append(final_tag)
-                              
-                  except Exception as e:
-                      print(f"Source error: {e}")
+                          if line.startswith("vless://"):
+                              parsed = parse_vless(line)
+                              if parsed:
+                                  all_servers.append(parsed)
+                  except: pass
 
-              # --- Constructing the Final JSON Structure ---
+              print(f"Parsed {len(all_servers)} servers. Probing ports...")
               
-              # 1. Balancer for Auto Select (Normal servers only)
-              balancers = [
-                  {
-                      "tag": "auto-balancer",
-                      "selector": ["srv-"], # Selects all tags starting with srv- (normal ones)
-                      "strategy": {
-                          "type": "leastPing"
-                      },
-                      "fallbackTag": all_tags_for_balancer[0] if all_tags_for_balancer else "direct"
-                  }
-              ]
+              valid_servers = []
+              with ThreadPoolExecutor(max_workers=50) as executor:
+                  futures = {}
+                  for s in all_servers:
+                      futures[executor.submit(check_port_alive, s['address'], s['port'])] = s
+                  
+                  for f in as_completed(futures):
+                      s = futures[f]
+                      if f.result():
+                          valid_servers.append(s)
+                          
+              print(f"Valid servers: {len(valid_servers)}")
               
-              # 2. Routing Rules
-              rules = [
-                  {
-                      "port": "53",
-                      "type": "field",
-                      "network": "tcp,udp",
-                      "outboundTag": "dns-out"
-                  },
-                  {
-                      "type": "field",
-                      "ip": ["geoip:private"],
-                      "outboundTag": "direct"
-                  },
-                  {
-                      "type": "field",
-                      "domain": ["geosite:category-ads-all"],
-                      "outboundTag": "block"
-                  },
-                  {
-                      "type": "field",
-                      "network": "tcp,udp",
-                      "balancerTag": "auto-balancer"
-                  }
-              ]
+              # Группировка
+              outbounds = []
+              balancers = []
+              country_tags = {} # cc -> [tags]
+              lte_tags = []
+              normal_tags = []
               
-              # 3. Combine Outbounds
-              # Order: Dummy -> Normal Servers -> LTE Servers -> Direct/Block/DNS
-              dummy_outbound = {
-                  "tag": "dummy",
-                  "protocol": "vless",
-                  "settings": {
-                      "vnext": [{"address": "127.0.0.1", "port": 0, "users": [{"id": str(uuid.uuid4()), "encryption": "none"}]}]
-                  },
-                  "streamSettings": {"network": "tcp", "security": "none"}
-              }
-              
-              direct_outbound = {"tag": "direct", "protocol": "freedom", "settings": {}}
-              block_outbound = {"tag": "block", "protocol": "blackhole", "settings": {}}
-              dns_outbound = {"tag": "dns-out", "protocol": "dns", "settings": {}}
-              
-              final_outbounds = [dummy_outbound] + normal_outbounds + lte_outbounds + [direct_outbound, block_outbound, dns_outbound]
-              
+              # Теги для стран
+              country_counter = {}
+
+              for idx, s in enumerate(valid_servers):
+                  tag = f"srv-{idx}"
+                  ob = s["outbound"]
+                  ob["tag"] = tag
+                  outbounds.append(ob)
+                  
+                  if s["is_lte"]:
+                      # LTE оставляем с оригинальным именем
+                      # Но тег уже присвоен выше. Чтобы в клиенте отображалось имя, 
+                      # некоторые клиенты используют tag, другие remarks. 
+                      # В Xray core имя берется из tag.
+                      # Мы перезапишем tag на оригинальное имя для LTE, чтобы оно сохранилось
+                      ob["tag"] = s["original_name"] 
+                      lte_tags.append(s["original_name"])
+                  else:
+                      # Обычные переименовываем
+                      new_name = f"Hello team❤️ {s['flag']}"
+                      ob["tag"] = new_name
+                      normal_tags.append(new_name)
+                      
+                      if s["cc"] not in country_tags:
+                          country_tags[s["cc"]] = []
+                      country_tags[s["cc"]].append(new_name)
+
+              # Создаем Balancer для Авто-выбора (только обычные)
+              if normal_tags:
+                  balancers.append({
+                      "tag": "⚡ Auto Select",
+                      "selector": ["Hello team❤️"], # Выбирает все теги, начинающиеся с этой фразы
+                      "strategy": {"type": "leastPing"},
+                      "fallbackTag": normal_tags[0] if normal_tags else "direct"
+                  })
+
+              # Создаем Balancers для стран
+              for cc, tags in country_tags.items():
+                  flag = FLAG_MAP.get(cc, "🏳️")
+                  balancers.append({
+                      "tag": f"📍 Country {flag}",
+                      "selector": tags,
+                      "strategy": {"type": "leastPing"}
+                  })
+                  
+              # Создаем Balancer для LTE
+              if lte_tags:
+                  balancers.append({
+                      "tag": "🚀 LTE Servers",
+                      "selector": lte_tags,
+                      "strategy": {"type": "leastPing"}
+                  })
+
+              # Финальная сборка JSON
               config = {
                   "log": {"access": "", "error": "", "loglevel": "warning"},
                   "dns": {
@@ -252,25 +258,21 @@ jobs:
                       "queryStrategy": "UseIPv4"
                   },
                   "inbounds": [
-                      {
-                          "tag": "socks",
-                          "port": 10808,
-                          "listen": "127.0.0.1",
-                          "protocol": "socks",
-                          "settings": {"udp": True, "auth": "noauth"}
-                      },
-                      {
-                          "tag": "http",
-                          "port": 10809,
-                          "listen": "127.0.0.1",
-                          "protocol": "http",
-                          "settings": {"auth": "noauth"}
-                      }
+                      {"tag": "socks", "port": 10808, "listen": "127.0.0.1", "protocol": "socks", "settings": {"udp": True}},
+                      {"tag": "http", "port": 10809, "listen": "127.0.0.1", "protocol": "http"}
                   ],
-                  "outbounds": final_outbounds,
+                  "outbounds": outbounds + [
+                      {"tag": "direct", "protocol": "freedom"},
+                      {"tag": "block", "protocol": "blackhole"},
+                      {"tag": "dns-out", "protocol": "dns"}
+                  ],
                   "routing": {
                       "domainStrategy": "AsIs",
-                      "rules": rules,
+                      "rules": [
+                          {"port": "53", "network": "tcp,udp", "outboundTag": "dns-out"},
+                          {"ip": ["geoip:private"], "outboundTag": "direct"},
+                          {"network": "tcp,udp", "balancerTag": "⚡ Auto Select"}
+                      ],
                       "balancers": balancers
                   },
                   "burstObservatory": {
@@ -280,30 +282,25 @@ jobs:
                           "sampling": 2,
                           "destination": "http://www.gstatic.com/generate_204"
                       },
-                      "subjectSelector": ["srv-"] # Monitor all our servers
-                  }
+                      "subjectSelector": ["srv-", "Hello team❤️"] # Мониторим и те и другие
+                  },
+                  "remarks": "Hello Team Aggregator"
               }
               
               with open("config.json", "w", encoding="utf-8") as f:
                   json.dump(config, f, indent=2, ensure_ascii=False)
-                  
-              print(f"Generated config.json with {len(normal_outbounds)} normal and {len(lte_outbounds)} LTE servers.")
+              print("Done! config.json created.")
 
           if __name__ == "__main__":
-              process_vless_aggregator()
-          EOF
-          python3 parser.py
+              process()
+          PYEOF
+          
+          python3 gen.py
 
-      - name: Commit and Push changes
+      - name: Commit & push
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          
           git add config.json
-          
-          if git diff --staged --quiet; then
-            echo "No changes to commit."
-          else
-            git commit -m "🔄 Auto-update: Refreshed VLESS JSON configs"
-            git push
-          fi
+          git diff --staged --quiet || git commit -m "chore: update config.json $(date -u +%H:%M)"
+          git push
