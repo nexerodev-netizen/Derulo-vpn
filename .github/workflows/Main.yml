@@ -1,0 +1,135 @@
+name: Aggregate LTE to JSON
+
+on:
+  schedule:
+    - cron: '0 */6 * * *' # Каждые 6 часов
+  workflow_dispatch:
+
+jobs:
+  aggregate-lte:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Parse, Filter LTE & Save JSON
+        run: |
+          cat << 'PYEOF' > parser.py
+          import requests
+          import urllib.parse
+          import json
+          import time
+
+          # Источники из второго твоего кода
+          SOURCES = [
+              "https://cdn.jsdelivr.net/gh/luxxuria/harvester@main/ping_tested.txt",
+              "https://raw.githubusercontent.com/bobrinaw/vlessforu/refs/heads/main/working_configs.txt"
+          ]
+
+          def has_flag_emoji(text):
+              """Проверка наличия флага (опционально, если нужно строго как во 2-м коде)"""
+              for char in text:
+                  if '\U0001F1E6' <= char <= '\U0001F1FF':
+                      return True
+              return False
+
+          def process_vless_to_json():
+              lte_entries = []
+              seen_links = set() # Для удаления дубликатов
+              
+              print("Starting LTE aggregation...")
+              
+              for url in SOURCES:
+                  try:
+                      print(f"Fetching: {url}")
+                      response = requests.get(url, timeout=15)
+                      response.raise_for_status()
+                      lines = response.text.splitlines()
+                      
+                      for line in lines:
+                          line = line.strip()
+                          if not line.startswith("vless://"):
+                              continue
+                          
+                          try:
+                              # Парсинг имени из фрагмента
+                              if '#' not in line:
+                                  continue
+                                  
+                              base_part, fragment = line.rsplit('#', 1)
+                              original_name = urllib.parse.unquote(fragment)
+                              
+                              # Проверка на флаг (как в твоем втором коде, чтобы отсеять мусор)
+                              if not has_flag_emoji(original_name):
+                                  continue
+
+                              # ГЛАВНОЕ УСЛОВИЕ: Только LTE
+                              if "LTE" not in original_name.upper():
+                                  continue
+
+                              # Проверка на дубликаты по самой ссылке (без имени)
+                              if base_part in seen_links:
+                                  continue
+                              seen_links.add(base_part)
+
+                              # Сохраняем объект
+                              entry = {
+                                  "link": line,       # Полная ссылка с оригинальным именем
+                                  "name": original_name, # Оригинальное имя
+                                  "source": url
+                              }
+                              lte_entries.append(entry)
+                              
+                          except Exception as e:
+                              # Пропускаем битые строки
+                              continue
+                              
+                  except Exception as e:
+                      print(f"Source error {url}: {e}")
+
+              # Формируем итоговый JSON
+              output_data = {
+                  "meta": {
+                      "generated_at": time.strftime("%Y-%m-%d %H:%M:%S UTC"),
+                      "total_lte_servers": len(lte_entries),
+                      "description": "Aggregated LTE VLESS configs without TCP check"
+                  },
+                  "servers": lte_entries
+              }
+
+              # Запись в файл
+              with open("lte_configs.json", "w", encoding="utf-8") as f:
+                  json.dump(output_data, f, indent=2, ensure_ascii=False)
+
+              print(f"Done! Total LTE servers saved: {len(lte_entries)}")
+
+          if __name__ == "__main__":
+              process_vless_to_json()
+          PYEOF
+          
+          python3 parser.py
+
+      - name: Commit and Push JSON
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          git add lte_configs.json
+          
+          if git diff --staged --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "🔄 Auto-update: Refreshed LTE JSON ($(wc -l < lte_configs.json) lines)"
+            git push
+          fi
