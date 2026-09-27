@@ -91,7 +91,7 @@ jobs:
                                   lte_servers.append(line)
                               else:
                                   flags = "".join([c for c in original_name if '\U0001F1E6' <= c <= '\U0001F1FF'])
-                                  final_name = f"Hello team❤️ {flags}"
+                                  final_name = f"Больше на Hello team❤️ {flags}"
                                   new_name_encoded = urllib.parse.quote(final_name)
                                   new_line = f"{base_part}#{new_name_encoded}"
                                   normal_servers.append(new_line)
