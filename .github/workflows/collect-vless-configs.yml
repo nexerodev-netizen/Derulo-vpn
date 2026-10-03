@@ -1,138 +1,262 @@
-name: Update VLESS Aggregator
+name: Check VLESS Configs
 
 on:
-  workflow_dispatch:
+  workflow_dispatch: # Ручной запуск
   schedule:
-    - cron: '0 */6 * * *'
+    - cron: "*/30 * * * *" # Автоматический запуск каждые 30 минут
+
+permissions:
+  contents: write # Разрешение на запись файлов в репозиторий
 
 jobs:
-  update-configs:
+  check:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
+    timeout-minutes: 20
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Install dependencies
-        run: pip install requests
-
-      - name: Run VLESS Parser and Checker
+      - name: Install Xray Core
         run: |
-          cat << 'EOF' > parser.py
-          import requests
-          import urllib.parse
+          echo "Installing latest Xray Core..."
+          VERSION=$(curl -s https://api.github.com/repos/XTLS/Xray-core/releases/latest | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/')
+          echo "Version: $VERSION"
+          
+          curl -fsSL "https://github.com/XTLS/Xray-core/releases/download/${VERSION}/Xray-linux-64.zip" -o /tmp/xray.zip
+          mkdir -p /tmp/xray-bin
+          unzip -q /tmp/xray.zip -d /tmp/xray-bin
+          chmod +x /tmp/xray-bin/xray
+          echo "Xray installed at /tmp/xray-bin/xray"
+
+      - name: Create and Run Checker Script
+        run: |
+          cat > check_configs.py << 'PYTHON_SCRIPT'
+          import json
+          import os
+          import re
           import socket
+          import subprocess
+          import tempfile
+          import time
+          from urllib.parse import urlparse, parse_qs
+          import requests
 
-          SOURCES = [
-              "https://cdn.jsdelivr.net/gh/luxxuria/harvester@main/ping_tested.txt",
-              "https://raw.githubusercontent.com/bobrinaw/vlessforu/refs/heads/main/working_configs.txt"
-          ]
+          # Источник конфигов
+          SOURCE_URL = "https://sub.vlessfo.ru/vlessforu/working_configs.txt"
+          OUTPUT_FILE = "configs.txt"
+          XRAY_BIN = "/tmp/xray-bin/xray"
+          
+          LOCAL_SOCKS_PORT = 10808
+          START_TIMEOUT = 5
+          REQUEST_TIMEOUT = 8
 
-          def has_flag_emoji(text):
-              for char in text:
-                  if '\U0001F1E6' <= char <= '\U0001F1FF':
-                      return True
-              return False
-
-          def check_port_alive(address, port, timeout=2):
+          def get_vless_links():
               try:
-                  sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                  sock.settimeout(timeout)
-                  result = sock.connect_ex((address, port))
-                  sock.close()
-                  return result == 0
-              except Exception:
+                  r = requests.get(SOURCE_URL, timeout=20)
+                  r.raise_for_status()
+                  lines = r.text.splitlines()
+                  
+                  unique_links = []
+                  seen = set()
+                  
+                  for line in lines:
+                      line = line.strip()
+                      # Исправляем возможные опечатки vless:://
+                      line = re.sub(r"^vless:://", "vless://", line)
+                      
+                      if line.startswith("vless://") and line not in seen:
+                          unique_links.append(line)
+                          seen.add(line)
+                          
+                  return unique_links
+              except Exception as e:
+                  print(f"Error fetching source: {e}")
+                  return []
+
+          def build_xray_config(uri):
+              parsed = urlparse(uri)
+              host = parsed.hostname
+              port = parsed.port or 443
+              uuid = parsed.username
+              
+              if not host or not uuid:
+                  raise ValueError("Invalid URI: missing host or uuid")
+
+              params = parse_qs(parsed.query)
+              
+              network = params.get("type", ["tcp"])[0]
+              security = params.get("security", ["none"])[0]
+              flow = params.get("flow", [""])[0]
+              
+              stream_settings = {
+                  "network": network,
+                  "security": security,
+              }
+
+              # Настройки TLS
+              if security == "tls":
+                  sni = params.get("sni", [host])[0]
+                  stream_settings["tlsSettings"] = {
+                      "serverName": sni,
+                      "allowInsecure": False
+                  }
+
+              # Настройки Reality
+              elif security == "reality":
+                  sni = params.get("sni", [host])[0]
+                  pbk = params.get("pbk", [""])[0]
+                  sid = params.get("sid", [""])[0]
+                  fp = params.get("fp", ["chrome"])[0]
+                  
+                  stream_settings["realitySettings"] = {
+                      "serverName": sni,
+                      "publicKey": pbk,
+                      "shortId": sid,
+                      "fingerprint": fp,
+                      "show": False
+                  }
+
+              # Настройки WebSocket
+              if network == "ws":
+                  path = params.get("path", ["/"])[0]
+                  ws_host = params.get("host", [host])[0]
+                  stream_settings["wsSettings"] = {
+                      "path": path,
+                      "headers": {"Host": ws_host}
+                  }
+
+              # Настройки gRPC
+              elif network == "grpc":
+                  service_name = params.get("serviceName", [""])[0]
+                  stream_settings["grpcSettings"] = {
+                      "serviceName": service_name
+                  }
+
+              config = {
+                  "log": {"loglevel": "error"},
+                  "inbounds": [{
+                      "port": LOCAL_SOCKS_PORT,
+                      "listen": "127.0.0.1",
+                      "protocol": "socks",
+                      "settings": {"udp": False}
+                  }],
+                  "outbounds": [{
+                      "protocol": "vless",
+                      "settings": {
+                          "vnext": [{
+                              "address": host,
+                              "port": port,
+                              "users": [{
+                                  "id": uuid,
+                                  "encryption": "none",
+                                  "flow": flow
+                              }]
+                          }]
+                      },
+                      "streamSettings": stream_settings
+                  }]
+              }
+              return config
+
+          def test_proxy_connection():
+              proxies = {
+                  "http": f"socks5h://127.0.0.1:{LOCAL_SOCKS_PORT}",
+                  "https": f"socks5h://127.0.0.1:{LOCAL_SOCKS_PORT}",
+              }
+              try:
+                  # Используем легкий эндпоинт Cloudflare
+                  r = requests.get("https://www.cloudflare.com/cdn-cgi/trace", proxies=proxies, timeout=REQUEST_TIMEOUT)
+                  return r.status_code == 200
+              except:
                   return False
 
-          def process_vless_aggregator():
-              lte_servers = []
-              normal_servers = []
+          def check_single_config(uri):
+              config_data = build_xray_config(uri)
               
-              print("Starting VLESS aggregation and validation...")
-              
-              for url in SOURCES:
-                  try:
-                      print(f"Fetching: {url}")
-                      response = requests.get(url, timeout=10)
-                      response.raise_for_status()
-                      lines = response.text.splitlines()
-                      
-                      for line in lines:
-                          line = line.strip()
-                          if not line.startswith("vless://"):
-                              continue
-                          
-                          try:
-                              if '#' in line:
-                                  base_part, fragment = line.rsplit('#', 1)
-                                  original_name = urllib.parse.unquote(fragment)
-                              else:
-                                  continue
-                              
-                              if not has_flag_emoji(original_name):
-                                  continue
-                              
-                              user_info, _, rest = base_part[8:].partition('@')
-                              address_port, _, _ = rest.partition('?')
-                              address, port_str = address_port.split(':')
-                              port = int(port_str)
-                              
-                              if not check_port_alive(address, port):
-                                  continue
+              # Создаем временный файл конфига
+              fd, config_path = tempfile.mkstemp(suffix=".json")
+              with os.fdopen(fd, 'w') as f:
+                  json.dump(config_data, f)
 
-                              if "LTE" in original_name.upper():
-                                  lte_servers.append(line)
-                              else:
-                                  flags = "".join([c for c in original_name if '\U0001F1E6' <= c <= '\U0001F1FF'])
-                                  final_name = f"Больше на Hello team❤️ {flags}"
-                                  new_name_encoded = urllib.parse.quote(final_name)
-                                  new_line = f"{base_part}#{new_name_encoded}"
-                                  normal_servers.append(new_line)
-                                  
-                          except Exception:
-                              continue
-                              
-                  except Exception as e:
-                      print(f"Source error {url}: {e}")
+              proc = None
+              try:
+                  # Запускаем Xray
+                  proc = subprocess.Popen(
+                      [XRAY_BIN, "run", "-c", config_path],
+                      stdout=subprocess.DEVNULL,
+                      stderr=subprocess.DEVNULL
+                  )
 
-              final_list = lte_servers + normal_servers
-              
-              header = [
-                  "# profile-title: InfinityX VPN",
-                  "# profile-update-interval: 1",
-                  ""
-              ]
-              
-              output_content = "\n".join(header + final_list)
-              
-              with open("vless.txt", "w", encoding="utf-8") as f:
-                  f.write(output_content)
+                  # Ждем открытия порта
+                  start_time = time.time()
+                  connected = False
+                  while time.time() - start_time < START_TIMEOUT:
+                      try:
+                          with socket.create_connection(("127.0.0.1", LOCAL_SOCKS_PORT), timeout=0.5):
+                              connected = True
+                              break
+                      except OSError:
+                          time.sleep(0.2)
 
-              print(f"Done! Total valid servers: {len(final_list)}")
-              print(f"LTE: {len(lte_servers)}, Normal: {len(normal_servers)}")
+                  if not connected:
+                      return False
+
+                  # Проверяем интернет через прокси
+                  return test_proxy_connection()
+
+              except Exception as e:
+                  print(f"Check error: {e}")
+                  return False
+              finally:
+                  if proc:
+                      try:
+                          proc.terminate()
+                          proc.wait(timeout=2)
+                      except:
+                          proc.kill()
+                  if os.path.exists(config_path):
+                      os.remove(config_path)
+
+          def main():
+              print("Fetching links...")
+              links = get_vless_links()
+              print(f"Found {len(links)} unique links.")
+
+              working_links = []
+              
+              for i, link in enumerate(links):
+                  print(f"[{i+1}/{len(links)}] Checking...", end=" ")
+                  if check_single_config(link):
+                      print("OK")
+                      working_links.append(link)
+                  else:
+                      print("FAIL")
+
+              # Сохраняем результат
+              with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
+                  for link in working_links:
+                      f.write(link + "\n")
+
+              print(f"\nDone! Working: {len(working_links)}/{len(links)}")
 
           if __name__ == "__main__":
-              process_vless_aggregator()
-          EOF
-          python3 parser.py
+              main()
+          PYTHON_SCRIPT
 
-      - name: Commit and Push changes
+          python3 -m pip install requests -q
+          python3 check_configs.py
+
+      - name: Commit results
         run: |
           git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           
-          git add vless.txt
+          git add configs.txt
           
-          if git diff --staged --quiet; then
+          if git diff --cached --quiet; then
             echo "No changes to commit."
           else
-            git commit -m "🔄 Auto-update: Refreshed VLESS configs"
+            git commit -m "Update working VLESS configs"
             git push
           fi
