@@ -1,4 +1,4 @@
-name: Check my VLESS nodes
+name: Check my VLESS configs
 
 on:
   workflow_dispatch:
@@ -14,8 +14,7 @@ jobs:
     timeout-minutes: 20
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Install Xray
         shell: bash
@@ -34,7 +33,9 @@ jobs:
           unzip -q /tmp/xray.zip -d /tmp/xray
           chmod +x /tmp/xray/xray
 
-          /tmp/xray/xray version
+      - name: Install dependencies
+        run: |
+          python3 -m pip install --disable-pip-version-check "requests[socks]"
 
       - name: Create checker
         shell: bash
@@ -42,7 +43,6 @@ jobs:
           cat > check.py <<'PY'
           import json
           import os
-          import re
           import socket
           import subprocess
           import tempfile
@@ -51,180 +51,87 @@ jobs:
 
           import requests
 
-          SOURCE = "https://sub.vlessfo.ru/vlessforu/working_configs.txt"
+          SOURCE = "configs-input.txt"
+          OUTPUT = "configs.txt"
           XRAY = "/tmp/xray/xray"
-          OUT = "configs.txt"
 
           LOCAL_PORT = 18080
-          START_TIMEOUT = 7
-          TEST_TIMEOUT = 10
+          START_TIMEOUT = 5
+          REQUEST_TIMEOUT = 8
 
-          def get_configs():
-              r = requests.get(SOURCE, timeout=20)
-              r.raise_for_status()
-
-              result = []
-
-              for raw in r.text.splitlines():
-                  uri = raw.strip()
-
-                  # исправляет vless:://
-                  uri = re.sub(r"^vless:://", "vless://", uri)
-
-                  if uri.startswith("vless://"):
-                      result.append(uri)
-
-              return list(dict.fromkeys(result))
-
-          def q1(q, name, default=None):
-              return q.get(name, [default])[0]
+          def read_configs():
+              with open(SOURCE, encoding="utf-8") as f:
+                  return list(dict.fromkeys(
+                      x.strip()
+                      for x in f
+                      if x.strip().startswith("vless://")
+                  ))
 
           def make_config(uri):
               p = urlparse(uri)
-
               host = p.hostname
+
               if not host:
-                  raise ValueError("no host")
+                  raise ValueError("missing host")
 
-              host = host.lower()
+              if not p.username:
+                  raise ValueError("missing UUID")
 
-              uuid = p.username
-              if not uuid:
-                  raise ValueError("no UUID")
-
-              port = p.port or 443
               q = parse_qs(p.query)
-
-              network = q1(q, "type", "tcp")
-              security = q1(q, "security", "none")
+              network = q.get("type", ["tcp"])[0]
+              security = q.get("security", ["none"])[0]
 
               stream = {
                   "network": network,
                   "security": security
               }
 
-              # TLS
               if security == "tls":
                   stream["tlsSettings"] = {
-                      "serverName": q1(q, "sni", host),
-                      "alpn": q.get("alpn", [])
+                      "serverName": q.get("sni", [host])[0]
                   }
 
-              # REALITY
-              elif security == "reality":
-                  reality = {
-                      "serverName": q1(q, "sni", host),
-                      "publicKey": q1(q, "pbk"),
-                      "shortId": q1(q, "sid", ""),
-                      "fingerprint": q1(q, "fp", "chrome")
-                  }
-
-                  if not reality["publicKey"]:
-                      raise ValueError("REALITY public key (pbk) missing")
-
-                  stream["realitySettings"] = reality
-
-              # WebSocket
               if network == "ws":
-                  headers = {}
-
-                  ws_host = q1(q, "host")
-                  if ws_host:
-                      headers["Host"] = ws_host
-
                   stream["wsSettings"] = {
-                      "path": q1(q, "path", "/"),
-                      "headers": headers
+                      "path": q.get("path", ["/"])[0],
+                      "headers": {
+                          "Host": q.get("host", [host])[0]
+                      }
                   }
 
-              # gRPC
-              elif network == "grpc":
+              if network == "grpc":
                   stream["grpcSettings"] = {
-                      "serviceName": q1(q, "serviceName", ""),
-                      "multiMode": q1(q, "mode", "") == "multi"
+                      "serviceName": q.get("serviceName", [""])[0]
                   }
-
-              # HTTP/2
-              elif network in ("h2", "http"):
-                  stream["httpSettings"] = {
-                      "path": q1(q, "path", "/"),
-                      "host": q.get("host", [])
-                  }
-
-              # XHTTP
-              elif network == "xhttp":
-                  stream["xhttpSettings"] = {
-                      "path": q1(q, "path", "/"),
-                      "host": q1(q, "host", "")
-                  }
-
-              # TCP
-              elif network in ("tcp", "raw"):
-                  stream["network"] = "raw"
-
-              # unknown transport — don't guess
-              elif network not in ("quic",):
-                  raise ValueError(
-                      f"unsupported VLESS transport: {network}"
-                  )
-
-              user = {
-                  "id": uuid,
-                  "encryption": q1(q, "encryption", "none")
-              }
-
-              flow = q1(q, "flow")
-              if flow:
-                  user["flow"] = flow
 
               return {
-                  "log": {
-                      "loglevel": "error"
-                  },
+                  "log": {"loglevel": "error"},
                   "inbounds": [{
                       "listen": "127.0.0.1",
                       "port": LOCAL_PORT,
                       "protocol": "socks",
-                      "settings": {
-                          "udp": False
-                      }
+                      "settings": {"udp": False}
                   }],
                   "outbounds": [{
                       "protocol": "vless",
                       "settings": {
                           "vnext": [{
                               "address": host,
-                              "port": port,
-                              "users": [user]
+                              "port": p.port or 443,
+                              "users": [{
+                                  "id": p.username,
+                                  "encryption": "none"
+                              }]
                           }]
                       },
                       "streamSettings": stream
                   }]
               }
 
-          def wait_for_port():
-              deadline = time.time() + START_TIMEOUT
-
-              while time.time() < deadline:
-                  try:
-                      with socket.create_connection(
-                          ("127.0.0.1", LOCAL_PORT),
-                          timeout=0.3
-                      ):
-                          return True
-                  except OSError:
-                      time.sleep(0.2)
-
-              return False
-
           def check(uri):
               config = make_config(uri)
 
-              fd, filename = tempfile.mkstemp(
-                  prefix="xray-",
-                  suffix=".json"
-              )
-
+              fd, filename = tempfile.mkstemp(suffix=".json")
               proc = None
 
               try:
@@ -237,28 +144,36 @@ jobs:
                       stderr=subprocess.DEVNULL
                   )
 
-                  if not wait_for_port():
+                  deadline = time.time() + START_TIMEOUT
+
+                  while time.time() < deadline:
+                      try:
+                          with socket.create_connection(
+                              ("127.0.0.1", LOCAL_PORT),
+                              timeout=.3
+                          ):
+                              break
+                      except OSError:
+                          time.sleep(.2)
+                  else:
                       return False
 
                   proxies = {
-                      "http":
-                          f"socks5h://127.0.0.1:{LOCAL_PORT}",
-                      "https":
-                          f"socks5h://127.0.0.1:{LOCAL_PORT}"
+                      "http": f"socks5h://127.0.0.1:{LOCAL_PORT}",
+                      "https": f"socks5h://127.0.0.1:{LOCAL_PORT}"
                   }
 
                   r = requests.get(
                       "https://www.cloudflare.com/cdn-cgi/trace",
                       proxies=proxies,
-                      timeout=TEST_TIMEOUT
+                      timeout=REQUEST_TIMEOUT
                   )
 
-                  return r.status_code == 200
+                  return r.ok
 
               finally:
                   if proc:
                       proc.terminate()
-
                       try:
                           proc.wait(timeout=2)
                       except subprocess.TimeoutExpired:
@@ -266,57 +181,40 @@ jobs:
 
                   try:
                       os.remove(filename)
-                  except FileNotFoundError:
+                  except OSError:
                       pass
 
-          def main():
-              configs = get_configs()
+          working = []
 
-              print("Total:", len(configs))
+          for i, uri in enumerate(read_configs(), 1):
+              print(f"[{i}] checking")
 
-              working = []
+              try:
+                  if check(uri):
+                      print("  OK")
+                      working.append(uri)
+                  else:
+                      print("  FAIL")
+              except Exception as e:
+                  print("  ERROR:", e)
 
-              for i, uri in enumerate(configs, 1):
-                  try:
-                      host = urlparse(uri).hostname
-                      print(f"[{i}/{len(configs)}] {host}")
+          with open(OUTPUT, "w", encoding="utf-8") as f:
+              f.write("\n".join(working))
 
-                      if check(uri):
-                          print("  OK")
-                          working.append(uri)
-                      else:
-                          print("  FAIL")
-
-                  except Exception as e:
-                      print("  ERROR:", e)
-
-              with open(OUT, "w", encoding="utf-8") as f:
-                  for uri in working:
-                      f.write(uri + "\n")
-
-              print()
-              print(f"Working: {len(working)}/{len(configs)}")
-
-          if __name__ == "__main__":
-              main()
+          print(f"Working: {len(working)}")
           PY
 
-      - name: Run checks
-        run: |
-          python3 -m pip install --disable-pip-version-check requests
-          python3 check.py
+      - name: Check configs
+        run: python3 check.py
 
-      - name: Commit configs.txt
+      - name: Commit result
         run: |
           git config user.name "github-actions[bot]"
-          git config user.email \
-            "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
           git add configs.txt
 
-          if git diff --cached --quiet; then
-            echo "No changes"
-          else
-            git commit -m "Update working VLESS configs"
+          if ! git diff --cached --quiet; then
+            git commit -m "Update configs"
             git push
           fi
