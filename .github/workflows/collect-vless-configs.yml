@@ -51,7 +51,7 @@ jobs:
 
           import requests
 
-          SOURCE = "configs-input.txt"
+          SOURCE_URL = "https://sub.vlessfo.ru/vlessforu/working_configs.txt"
           OUTPUT = "configs.txt"
           XRAY = "/tmp/xray/xray"
 
@@ -59,13 +59,16 @@ jobs:
           START_TIMEOUT = 5
           REQUEST_TIMEOUT = 8
 
-          def read_configs():
-              with open(SOURCE, encoding="utf-8") as f:
-                  return list(dict.fromkeys(
-                      x.strip()
-                      for x in f
-                      if x.strip().startswith("vless://")
-                  ))
+          def get_configs_from_web():
+              try:
+                  r = requests.get(SOURCE_URL, timeout=20)
+                  r.raise_for_status()
+                  # Фильтруем только vless ссылки и убираем дубликаты
+                  lines = [line.strip() for line in r.text.splitlines() if line.strip().startswith("vless://")]
+                  return list(dict.fromkeys(lines))
+              except Exception as e:
+                  print(f"Error fetching configs: {e}")
+                  return []
 
           def make_config(uri):
               p = urlparse(uri)
@@ -89,6 +92,14 @@ jobs:
               if security == "tls":
                   stream["tlsSettings"] = {
                       "serverName": q.get("sni", [host])[0]
+                  }
+              
+              elif security == "reality":
+                  stream["realitySettings"] = {
+                      "serverName": q.get("sni", [host])[0],
+                      "publicKey": q.get("pbk", [""])[0],
+                      "shortId": q.get("sid", [""])[0],
+                      "fingerprint": q.get("fp", ["chrome"])[0]
                   }
 
               if network == "ws":
@@ -185,9 +196,12 @@ jobs:
                       pass
 
           working = []
+          configs = get_configs_from_web()
+          
+          print(f"Found {len(configs)} configs to check.")
 
-          for i, uri in enumerate(read_configs(), 1):
-              print(f"[{i}] checking")
+          for i, uri in enumerate(configs, 1):
+              print(f"[{i}/{len(configs)}] checking {urlparse(uri).hostname}")
 
               try:
                   if check(uri):
