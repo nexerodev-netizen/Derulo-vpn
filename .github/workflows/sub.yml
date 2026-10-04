@@ -23,16 +23,42 @@ jobs:
           echo "📥 Скачивание списка..."
           curl -sSL "$SOURCE_URL" -o raw_list.txt
           
-          echo "🧹 Удаляем ТОЛЬКО VLESS/TCP/TLS и чистый VLESS/TCP..."
-          # -E включает расширенные регулярные выражения
-          # Первое условие: точное совпадение "VLESS / TCP / TLS"
-          # Второе условие: строка заканчивается на "VLESS / TCP" (без суффиксов вроде REALITY)
-          grep -v -E "(VLESS \/ TCP \/ TLS|^.*VLESS \/ TCP$)" raw_list.txt > "$OUTPUT_FILE" || true
-          
-          sed -i '/^$/d' "$OUTPUT_FILE"
-          
-          LINES_COUNT=$(wc -l < "$OUTPUT_FILE")
-          echo "✅ Готово. Осталось серверов: $LINES_COUNT"
+          echo "🧹 Точная фильтрация через Python..."
+          python3 - << 'PYEOF'
+          import sys
+
+          blocked_patterns = [
+              "VLESS / TCP / TLS",
+              "VLESS / TCP"
+          ]
+
+          kept_lines = []
+          removed_count = 0
+
+          with open("raw_list.txt", "r", encoding="utf-8") as f:
+              for line in f:
+                  stripped = line.strip()
+                  if not stripped:
+                      continue
+                  
+                  # Проверяем, содержит ли строка один из заблокированных паттернов
+                  is_blocked = False
+                  for pattern in blocked_patterns:
+                      if pattern in stripped:
+                          is_blocked = True
+                          break
+                  
+                  if is_blocked:
+                      removed_count += 1
+                  else:
+                      kept_lines.append(stripped)
+
+          with open("sub.txt", "w", encoding="utf-8") as f:
+              f.write("\n".join(kept_lines))
+
+          print(f"✅ Удалено: {removed_count} серверов")
+          print(f"✅ Осталось: {len(kept_lines)} серверов")
+          PYEOF
 
       - name: Commit and Push Changes
         run: |
@@ -42,7 +68,7 @@ jobs:
           git add sub.txt
           
           if ! git diff --cached --quiet; then
-            git commit -m "chore: removed vless tcp tls and plain tcp only ($(date +'%Y-%m-%d %H:%M'))"
+            git commit -m "chore: strict tcp/tls removal ($(date +'%Y-%m-%d %H:%M'))"
             git push https://${{ secrets.GH_TOKEN }}@github.com/${{ github.repository }}.git HEAD:${{ github.ref_name }}
             echo "🚀 sub.txt обновлен!"
           else
