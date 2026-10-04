@@ -1,4 +1,4 @@
-name: Filter VLESS Strict TCP-TLS Only
+name: Filter VLESS URI Strict
 
 on:
   schedule:
@@ -20,17 +20,12 @@ jobs:
           SOURCE_URL="https://cdn.jsdelivr.net/gh/luxxuria/harvester@main/ping_tested.txt"
           OUTPUT_FILE="sub.txt"
           
-          echo "📥 Скачивание списка..."
+          echo " Скачивание списка..."
           curl -sSL "$SOURCE_URL" -o raw_list.txt
           
-          echo "🧹 Точная фильтрация через Python..."
+          echo "🧹 Парсинг vless:// URI и фильтрация..."
           python3 - << 'PYEOF'
-          import sys
-
-          blocked_patterns = [
-              "VLESS / TCP / TLS",
-              "VLESS / TCP"
-          ]
+          from urllib.parse import urlparse, parse_qs
 
           kept_lines = []
           removed_count = 0
@@ -38,26 +33,51 @@ jobs:
           with open("raw_list.txt", "r", encoding="utf-8") as f:
               for line in f:
                   stripped = line.strip()
-                  if not stripped:
+                  if not stripped or not stripped.startswith("vless://"):
+                      # Не-VLESS строки оставляем как есть (заголовки, комментарии)
+                      kept_lines.append(stripped)
                       continue
-                  
-                  # Проверяем, содержит ли строка один из заблокированных паттернов
-                  is_blocked = False
-                  for pattern in blocked_patterns:
-                      if pattern in stripped:
+
+                  try:
+                      parsed = urlparse(stripped)
+                      params = parse_qs(parsed.query)
+                      
+                      transport = params.get("type", ["tcp"])[0].lower()
+                      security = params.get("security", ["none"])[0].lower()
+                      
+                      is_blocked = False
+                      
+                      # Блокируем VLESS/TCP/TLS
+                      if transport == "tcp" and security == "tls":
                           is_blocked = True
-                          break
-                  
-                  if is_blocked:
-                      removed_count += 1
-                  else:
+                      
+                      # Блокируем чистый VLESS/TCP (без security или security=none)
+                      elif transport == "tcp" and security in ("none", ""):
+                          is_blocked = True
+                      
+                      # Блокируем XHTTP + TLS
+                      elif transport == "xhttp" and security == "tls":
+                          is_blocked = True
+                      
+                      # Блокируем XHTTP + Reality + TLS
+                      elif transport == "xhttp" and security == "reality" and "tls" in stripped.lower():
+                          is_blocked = True
+
+                      if is_blocked:
+                          removed_count += 1
+                      else:
+                          kept_lines.append(stripped)
+                          
+                  except Exception as e:
+                      # Если не удалось распарсить — оставляем на всякий случай
+                      print(f"⚠️ Пропуск невалидной строки: {e}")
                       kept_lines.append(stripped)
 
           with open("sub.txt", "w", encoding="utf-8") as f:
               f.write("\n".join(kept_lines))
 
           print(f"✅ Удалено: {removed_count} серверов")
-          print(f"✅ Осталось: {len(kept_lines)} серверов")
+          print(f"✅ Осталось: {len([l for l in kept_lines if l.startswith('vless://')])} vless-серверов")
           PYEOF
 
       - name: Commit and Push Changes
@@ -68,9 +88,9 @@ jobs:
           git add sub.txt
           
           if ! git diff --cached --quiet; then
-            git commit -m "chore: strict tcp/tls removal ($(date +'%Y-%m-%d %H:%M'))"
+            git commit -m "chore: strict vless uri filter ($(date +'%Y-%m-%d %H:%M'))"
             git push https://${{ secrets.GH_TOKEN }}@github.com/${{ github.repository }}.git HEAD:${{ github.ref_name }}
-            echo "🚀 sub.txt обновлен!"
+            echo " sub.txt обновлен!"
           else
             echo "ℹ️ Изменений нет"
           fi
