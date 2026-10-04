@@ -1,4 +1,4 @@
-name: Check Multi-Source VLESS Configs
+name: Check Multi-Source VLESS Configs v2.0
 
 on:
   workflow_dispatch:
@@ -34,21 +34,15 @@ jobs:
         shell: bash
         run: |
           cat > check.py <<'PY'
-          import json
-          import os
-          import socket
-          import subprocess
-          import tempfile
-          import time
-          from urllib.parse import urlparse, parse_qs
+          import json, os, socket, subprocess, tempfile, time
+          from urllib.parse import urlparse, parse_qs, quote
           import requests
 
-          # Список источников
           SOURCES = [
               "https://raw.githubusercontent.com/nexerodev-netizen/Derulo-vpn/refs/heads/main/configs.txt",
               "https://cdn.jsdelivr.net/gh/luxxuria/harvester@main/ping_tested.txt",
               "https://subrostunnel.vercel.app/wf.txt",
-              "https://sub.vlessfo.ru/vlessforu/working_configs.txt" 
+              "https://sub.vlessfo.ru/vlessforu/working_configs.txt"
           ]
           
           OUTPUT = "configs.txt"
@@ -56,53 +50,44 @@ jobs:
           LOCAL_PORT = 18080
           START_TIMEOUT = 5
           REQUEST_TIMEOUT = 8
+          FAST_PING_THRESHOLD = 800  # Порог для получения статуса v2.0
+
+          COUNTRY_FLAGS = {
+              "de": "🇩🇪", "us": "🇺", "gb": "🇬", "fr": "🇫🇷", "nl": "🇳🇱",
+              "se": "🇸", "pl": "🇵🇱", "ca": "🇨🇦", "sg": "🇸🇬", "jp": "🇯🇵",
+              "ru": "🇷", "ua": "🇺🇦", "fi": "🇫🇮", "it": "🇮🇹", "br": "🇧🇷",
+              "ae": "🇦🇪", "cz": "🇨🇿", "hk": "🇭🇰", "lv": "🇱🇻", "ee": "🇪🇪"
+          }
 
           def fetch_all_configs():
-              all_uris = []
-              seen = set()
-              
+              all_uris, seen = [], set()
               for url in SOURCES:
                   try:
-                      print(f"Fetching {url}...")
                       r = requests.get(url, timeout=20)
                       r.raise_for_status()
-                      
                       for line in r.text.splitlines():
-                          uri = line.strip()
-                          # Исправление опечаток vless:://
-                          uri = uri.replace("vless:://", "vless://")
-                          
+                          uri = line.strip().replace("vless:://", "vless://")
                           if uri.startswith("vless://") and uri not in seen:
-                              # === ФИЛЬТР: УБИРАЕМ WS/TLS ===
-                              parsed = urlparse(uri)
-                              params = parse_qs(parsed.query)
-                              network = params.get("type", ["tcp"])[0]
-                              security = params.get("security", ["none"])[0]
-                              
-                              # Пропускаем, если это WebSocket + обычный TLS
-                              if network == "ws" and security == "tls":
-                                  continue
-                                  
-                              all_uris.append(uri)
-                              seen.add(uri)
-                              
+                              p = urlparse(uri)
+                              q = parse_qs(p.query)
+                              net = q.get("type", ["tcp"])[0]
+                              sec = q.get("security", ["none"])[0]
+                              if not (net == "ws" and sec == "tls"):
+                                  all_uris.append(uri)
+                                  seen.add(uri)
                   except Exception as e:
                       print(f"Error fetching {url}: {e}")
-                      
               return all_uris
 
           def make_config(uri):
               p = urlparse(uri)
               host = p.hostname
-              if not host or not p.username:
-                  raise ValueError("Invalid URI")
-
+              if not host or not p.username: raise ValueError("Invalid URI")
               q = parse_qs(p.query)
               network = q.get("type", ["tcp"])[0]
               security = q.get("security", ["none"])[0]
-
               stream = {"network": network, "security": security}
-
+              
               if security == "tls":
                   stream["tlsSettings"] = {"serverName": q.get("sni", [host])[0]}
               elif security == "reality":
@@ -112,20 +97,13 @@ jobs:
                       "shortId": q.get("sid", [""])[0],
                       "fingerprint": q.get("fp", ["chrome"])[0]
                   }
-
               if network == "ws":
-                  stream["wsSettings"] = {
-                      "path": q.get("path", ["/"])[0],
-                      "headers": {"Host": q.get("host", [host])[0]}
-                  }
+                  stream["wsSettings"] = {"path": q.get("path", ["/"])[0], "headers": {"Host": q.get("host", [host])[0]}}
               elif network == "grpc":
                   stream["grpcSettings"] = {"serviceName": q.get("serviceName", [""])[0]}
               elif network == "xhttp":
-                  stream["xhttpSettings"] = {
-                      "path": q.get("path", ["/"])[0],
-                      "host": q.get("host", [""])[0]
-                  }
-
+                  stream["xhttpSettings"] = {"path": q.get("path", ["/"])[0], "host": q.get("host", [""])[0]}
+                  
               return {
                   "log": {"loglevel": "error"},
                   "inbounds": [{"listen": "127.0.0.1", "port": LOCAL_PORT, "protocol": "socks", "settings": {"udp": False}}],
@@ -142,7 +120,6 @@ jobs:
               proc = None
               try:
                   with os.fdopen(fd, "w") as f: json.dump(config, f)
-                  
                   proc = subprocess.Popen([XRAY, "run", "-c", filename], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                   
                   deadline = time.time() + START_TIMEOUT
@@ -150,11 +127,14 @@ jobs:
                       try:
                           with socket.create_connection(("127.0.0.1", LOCAL_PORT), timeout=0.3): break
                       except OSError: time.sleep(0.2)
-                  else: return False
+                  else: return False, 99999
 
                   proxies = {"http": f"socks5h://127.0.0.1:{LOCAL_PORT}", "https": f"socks5h://127.0.0.1:{LOCAL_PORT}"}
+                  start_time = time.time()
                   r = requests.get("https://www.cloudflare.com/cdn-cgi/trace", proxies=proxies, timeout=REQUEST_TIMEOUT)
-                  return r.ok
+                  latency = int((time.time() - start_time) * 1000)
+                  
+                  return (True, latency) if r.ok else (False, 99999)
               finally:
                   if proc:
                       proc.terminate()
@@ -163,25 +143,47 @@ jobs:
                   try: os.remove(filename)
                   except: pass
 
+          def get_flag(host):
+              for code, flag in COUNTRY_FLAGS.items():
+                  if code in host.lower(): return flag
+              return "🌐" 
+
           def main():
               configs = fetch_all_configs()
-              print(f"\nTotal unique configs (after WS/TLS filter): {len(configs)}")
+              print(f"\nTotal unique configs (filtered): {len(configs)}")
               
-              working = []
+              working_with_ping = []
               for i, uri in enumerate(configs, 1):
-                  print(f"[{i}/{len(configs)}] checking {urlparse(uri).hostname}...", end=" ")
+                  print(f"[{i}/{len(configs)}] checking...", end=" ")
                   try:
-                      if check(uri):
-                          print("OK")
-                          working.append(uri)
+                      is_ok, ping = check(uri)
+                      if is_ok:
+                          print(f"OK ({ping}ms)")
+                          working_with_ping.append((uri, ping))
                       else:
                           print("FAIL")
                   except Exception as e:
                       print(f"ERROR ({e})")
 
+              # === ИЩЕЙКА v2.0: СОРТИРОВКА И ФОРМАТИРОВАНИЕ ===
+              working_with_ping.sort(key=lambda x: x[1])
+              
               with open(OUTPUT, "w", encoding="utf-8") as f:
-                  f.write("\n".join(working))
-              print(f"\nDone! Working: {len(working)}")
+                  for rank, (uri, ping) in enumerate(working_with_ping, 1):
+                      p = urlparse(uri)
+                      flag = get_flag(p.hostname)
+                      
+                      # Логика именования v2.0
+                      if ping < FAST_PING_THRESHOLD:
+                          new_remark = f"{flag} VLESSFORU v2.0 #{rank}"
+                      else:
+                          new_remark = f"{flag} VLESSFORU #{rank}"
+                      
+                      base_uri = uri.split("#")[0] if "#" in uri else uri
+                      final_uri = f"{base_uri}#{quote(new_remark)}"
+                      f.write(final_uri + "\n")
+                      
+              print(f"\nDone! Top server: {working_with_ping[0][1]}ms | Total: {len(working_with_ping)}")
 
           if __name__ == "__main__":
               main()
@@ -196,6 +198,6 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add configs.txt
           if ! git diff --cached --quiet; then
-            git commit -m "Update multi-source VLESS configs"
+            git commit -m "Update multi-source VLESS configs v2.0"
             git push
           fi
