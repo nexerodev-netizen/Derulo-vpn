@@ -1,0 +1,50 @@
+name: Filter VLESS Strict TCP-TLS Only
+
+on:
+  schedule:
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+
+jobs:
+  filter-and-update:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download and Filter VLESS List
+        run: |
+          SOURCE_URL="https://cdn.jsdelivr.net/gh/luxxuria/harvester@main/ping_tested.txt"
+          OUTPUT_FILE="sub.txt"
+          
+          echo "📥 Скачивание списка..."
+          curl -sSL "$SOURCE_URL" -o raw_list.txt
+          
+          echo "🧹 Удаляем ТОЛЬКО VLESS/TCP/TLS и чистый VLESS/TCP..."
+          # -E включает расширенные регулярные выражения
+          # Первое условие: точное совпадение "VLESS / TCP / TLS"
+          # Второе условие: строка заканчивается на "VLESS / TCP" (без суффиксов вроде REALITY)
+          grep -v -E "(VLESS \/ TCP \/ TLS|^.*VLESS \/ TCP$)" raw_list.txt > "$OUTPUT_FILE" || true
+          
+          sed -i '/^$/d' "$OUTPUT_FILE"
+          
+          LINES_COUNT=$(wc -l < "$OUTPUT_FILE")
+          echo "✅ Готово. Осталось серверов: $LINES_COUNT"
+
+      - name: Commit and Push Changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          
+          git add sub.txt
+          
+          if ! git diff --cached --quiet; then
+            git commit -m "chore: removed vless tcp tls and plain tcp only ($(date +'%Y-%m-%d %H:%M'))"
+            git push https://${{ secrets.GH_TOKEN }}@github.com/${{ github.repository }}.git HEAD:${{ github.ref_name }}
+            echo "🚀 sub.txt обновлен!"
+          else
+            echo "ℹ️ Изменений нет"
+          fi
