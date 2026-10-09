@@ -24,13 +24,11 @@ jobs:
           URL = "https://sub.vlessfo.ru/vlessforu/working_configs.txt"
           OUTPUT = "working_configs.txt"
           
-          # Новый заголовок профиля
-          NEW_TITLE = "# profile-title: Платный впн"
+          # Твои новые заголовки
+          HEADER_TITLE = "# profile-title: Платный впн"
+          HEADER_ANNOUNCE = "# announce: 🔥 Серверов: 182 | Обновлено: 09.10.2026 11:02 | Обязательно подпишитесь на VlessForu❤️ в Телеграме! | ⚠️ LTE/5G для крайних случаев! Без торрентов! | 🚀 Top: ~2891.4 Mbps, ~177 ms"
           
-          # Текст для announce, который мы добавим в имя
-          ANNOUNCE_TEXT = "🔥 Серверов: 182 | Обновлено: 09.10.2026 11:02 | Обязательно подпишитесь на VlessForu❤️ в Телеграме! | ⚠️ LTE/5G для крайних случаев! Без торрентов! | 🚀 Top: ~2891.4 Mbps, ~177 ms"
-          
-          BASE_NAME = "Платный впн"
+          NEW_NAME = "Бесплатно"
           LTE_TAG = "LTE"
 
           def fetch():
@@ -44,7 +42,7 @@ jobs:
           def process_line(line):
               line = line.strip()
               
-              # Пропускаем все старые служебные комментарии (#...)
+              # Игнорируем все старые служебные строки (#...)
               if not line or line.startswith('#'):
                   return None
                   
@@ -57,15 +55,12 @@ jobs:
               else:
                   base, fragment = line, ""
 
-              # Если есть LTE, оставляем как есть (возвращаем оригинальную строку)
+              # Если есть LTE, оставляем имя как было
               if LTE_TAG in fragment:
                   return line
               
-              # Формируем новое имя: Базовое имя + Announce
-              # Кодируем в URL format, чтобы спецсимволы не ломали ссылку
-              full_name = f"{BASE_NAME} | {ANNOUNCE_TEXT}"
-              new_fragment = quote(full_name)
-              
+              # Иначе меняем имя на "Бесплатно"
+              new_fragment = quote(NEW_NAME)
               return f"{base}#{new_fragment}"
 
           lines = fetch()
@@ -76,8 +71,8 @@ jobs:
               if res:
                   processed.append(res)
 
-          # Собираем итоговый файл: Только новый заголовок + серверы
-          content = NEW_TITLE + "\n" + "\n".join(processed)
+          # Собираем файл: Заголовок + Announce + пустая строка + серверы
+          content = f"{HEADER_TITLE}\n{HEADER_ANNOUNCE}\n\n" + "\n".join(processed)
           
           with open(OUTPUT, "w", encoding="utf-8") as f:
               f.write(content)
@@ -90,4 +85,4 @@ jobs:
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
           git add working_configs.txt
-          git diff --quiet && git diff --staged --quiet || (git commit -m "Update: clean headers, added announce to name" && git push)
+          git diff --quiet && git diff --staged --quiet || (git commit -m "Update: clean headers, set announce, renamed non-LTE to Free" && git push)
