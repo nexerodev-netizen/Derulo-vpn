@@ -5,7 +5,6 @@ on:
     - cron: '0 */6 * * *'
   workflow_dispatch:
 
-# Разрешаем токену писать в репозиторий
 permissions:
   contents: write
 
@@ -15,9 +14,6 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
-        with:
-          # Важно: оставляем историю для корректного коммита
-          fetch-depth: 1 
 
       - name: Process and Rename Servers
         run: |
@@ -27,8 +23,14 @@ jobs:
 
           URL = "https://sub.vlessfo.ru/vlessforu/working_configs.txt"
           OUTPUT = "working_configs.txt"
-          TITLE = "# profile-title: Платный впн"
-          NEW_NAME = "Бесплатно"
+          
+          # Новый заголовок профиля
+          NEW_TITLE = "# profile-title: Платный впн"
+          
+          # Текст для announce, который мы добавим в имя
+          ANNOUNCE_TEXT = "🔥 Серверов: 182 | Обновлено: 09.10.2026 11:02 | Обязательно подпишитесь на VlessForu❤️ в Телеграме! | ⚠️ LTE/5G для крайних случаев! Без торрентов! | 🚀 Top: ~2891.4 Mbps, ~177 ms"
+          
+          BASE_NAME = "Платный впн"
           LTE_TAG = "LTE"
 
           def fetch():
@@ -41,28 +43,41 @@ jobs:
 
           def process_line(line):
               line = line.strip()
-              if not line or not line.startswith("vless://"):
-                  return line
               
+              # Пропускаем все старые служебные комментарии (#...)
+              if not line or line.startswith('#'):
+                  return None
+                  
+              if not line.startswith("vless://"):
+                  return None
+
               # Разделяем базу и фрагмент (имя)
               if '#' in line:
                   base, fragment = line.split('#', 1)
               else:
                   base, fragment = line, ""
 
-              # Если есть LTE, оставляем как есть
+              # Если есть LTE, оставляем как есть (возвращаем оригинальную строку)
               if LTE_TAG in fragment:
                   return line
               
-              # Иначе меняем имя на "Бесплатно"
-              new_fragment = quote(NEW_NAME)
+              # Формируем новое имя: Базовое имя + Announce
+              # Кодируем в URL format, чтобы спецсимволы не ломали ссылку
+              full_name = f"{BASE_NAME} | {ANNOUNCE_TEXT}"
+              new_fragment = quote(full_name)
+              
               return f"{base}#{new_fragment}"
 
           lines = fetch()
-          processed = [process_line(l) for l in lines if l.strip()]
+          processed = []
           
-          # Собираем итоговый файл: Заголовок + серверы
-          content = TITLE + "\n" + "\n".join(processed)
+          for l in lines:
+              res = process_line(l)
+              if res:
+                  processed.append(res)
+
+          # Собираем итоговый файл: Только новый заголовок + серверы
+          content = NEW_TITLE + "\n" + "\n".join(processed)
           
           with open(OUTPUT, "w", encoding="utf-8") as f:
               f.write(content)
@@ -75,4 +90,4 @@ jobs:
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
           git add working_configs.txt
-          git diff --quiet && git diff --staged --quiet || (git commit -m "Update: added title and renamed non-LTE nodes" && git push)
+          git diff --quiet && git diff --staged --quiet || (git commit -m "Update: clean headers, added announce to name" && git push)
