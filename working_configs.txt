@@ -1,5 +1,5 @@
 # profile-title: Платный впн
-# subscription-userinfo: upload=1073741824; download=0; total=0; expire=4945165512
+# subscription-userinfo: upload=1073741824; download=53687091200; total=214748364800; expire=4945165737
 # announce: 🔥 Серверов: 182 | Обновлено: 09.10.2026 11:02 | ⚠️ LTE/5G для крайних случаев! Без торрентов! | 🚀 Top: ~2891.4 Mbps, ~177 ms
 
 vless://2111b7d2-e31a-474b-95a2-5218bc6cce71@pl-3.pandaonline.org:443?encryption=none&flow=xtls-rprx-vision&type=tcp&security=reality&sni=pl-3.pandaonline.org&pbk=ONOR-MBmQKF8zCMtYML8YqNQY18UaGoWQX086dAXmic&fp=firefox#%D0%A1%D0%B5%D1%80%D0%B2%D0%B5%D1%80%20%231
