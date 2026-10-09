@@ -2,11 +2,11 @@ name: Update VLESS Aggregator
 
 on:
   schedule:
-    - cron: '0 */6 * * *' # Каждые 6 часов
-  workflow_dispatch: # Ручной запуск
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
 
 permissions:
-  contents: write # Разрешение на запись в репозиторий
+  contents: write
 
 jobs:
   update-configs:
@@ -20,11 +20,17 @@ jobs:
           python3 << 'EOF'
           import urllib.request
           from urllib.parse import quote
+          import time
 
           URL = "https://sub.vlessfo.ru/vlessforu/working_configs.txt"
           OUTPUT = "working_configs.txt"
 
+          # Генерируем expire: текущее время + 100 лет (в секундах)
+          EXPIRE_TIMESTAMP = int(time.time()) + (100 * 365 * 24 * 3600)
+
           HEADER_TITLE = "# profile-title: Платный впн"
+          # upload=1GB, download=50GB, total=200GB
+          HEADER_USERINFO = f"# subscription-userinfo: upload=1073741824; download=0; total=0; expire={EXPIRE_TIMESTAMP}"
           HEADER_ANNOUNCE = "# announce: 🔥 Серверов: 182 | Обновлено: 09.10.2026 11:02 | ⚠️ LTE/5G для крайних случаев! Без торрентов! | 🚀 Top: ~2891.4 Mbps, ~177 ms"
 
           SERVER_PREFIX = "Сервер #"
@@ -68,13 +74,18 @@ jobs:
                   processed.append(f"{base}#{new_fragment}")
                   counter += 1
 
-          # Собираем итоговый файл
-          content = f"{HEADER_TITLE}\n{HEADER_ANNOUNCE}\n\n" + "\n".join(processed)
+          # Собираем итоговый файл с новой структурой заголовков
+          content = (
+              f"{HEADER_TITLE}\n"
+              f"{HEADER_USERINFO}\n"
+              f"{HEADER_ANNOUNCE}\n\n"
+              + "\n".join(processed)
+          )
           
           with open(OUTPUT, "w", encoding="utf-8") as f:
               f.write(content)
           
-          print(f"Done. Renamed {counter - 1} servers, kept LTE as-is.")
+          print(f"Done. Expire set to {EXPIRE_TIMESTAMP}. Renamed {counter - 1} servers.")
           EOF
 
       - name: Commit and Push to Repo
@@ -82,4 +93,4 @@ jobs:
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
           git add working_configs.txt
-          git diff --quiet && git diff --staged --quiet || (git commit -m "Update: clean announce, numbered non-LTE servers" && git push)
+          git diff --quiet && git diff --staged --quiet || (git commit -m "Update: added userinfo, numbered non-LTE servers" && git push)
