@@ -25,12 +25,19 @@ jobs:
           URL = "https://sub.vlessfo.ru/vlessforu/working_configs.txt"
           OUTPUT = "working_configs.txt"
 
-          # Генерируем expire: текущее время + 100 лет (в секундах)
+          # Генерируем expire: текущее время + 100 лет
+          # Если клиент глючит с датой, можно поставить просто очень далекое будущее, например 2099 год
+          # Но формула ниже дает ровно +100 лет от момента запуска
           EXPIRE_TIMESTAMP = int(time.time()) + (100 * 365 * 24 * 3600)
 
           HEADER_TITLE = "# profile-title: Платный впн"
-          # upload=1GB, download=50GB, total=200GB
-          HEADER_USERINFO = f"# subscription-userinfo: upload=1073741824; download=0; total=0; expire={EXPIRE_TIMESTAMP}"
+          
+          # Значения трафика (в байтах):
+          # upload: 1 ГБ = 1073741824
+          # download: 50 ГБ = 53687091200
+          # total: 200 ГБ = 214748364800
+          HEADER_USERINFO = f"# subscription-userinfo: upload=1073741824; download=53687091200; total=214748364800; expire={EXPIRE_TIMESTAMP}"
+          
           HEADER_ANNOUNCE = "# announce: 🔥 Серверов: 182 | Обновлено: 09.10.2026 11:02 | ⚠️ LTE/5G для крайних случаев! Без торрентов! | 🚀 Top: ~2891.4 Mbps, ~177 ms"
 
           SERVER_PREFIX = "Сервер #"
