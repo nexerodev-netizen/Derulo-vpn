@@ -23,12 +23,12 @@ jobs:
 
           URL = "https://sub.vlessfo.ru/vlessforu/working_configs.txt"
           OUTPUT = "working_configs.txt"
-          
-          # Твои новые заголовки
+
           HEADER_TITLE = "# profile-title: Платный впн"
-          HEADER_ANNOUNCE = "# announce: 🔥 Серверов: 182 | Обновлено: 09.10.2026 11:02 | Обязательно подпишитесь на VlessForu❤️ в Телеграме! | ⚠️ LTE/5G для крайних случаев! Без торрентов! | 🚀 Top: ~2891.4 Mbps, ~177 ms"
-          
-          NEW_NAME = "Бесплатно"
+          # Убран водяной знак (VlessForu/Telegram), оставлена только статистика
+          HEADER_ANNOUNCE = "# announce: 🔥 Серверов: 182 | Обновлено: 09.10.2026 11:02 | ⚠️ LTE/5G для крайних случаев! Без торрентов! | 🚀 Top: ~2891.4 Mbps, ~177 ms"
+
+          SERVER_PREFIX = "Сервер #"
           LTE_TAG = "LTE"
 
           def fetch():
@@ -39,45 +39,42 @@ jobs:
                   print(f"Error: {e}")
                   return []
 
-          def process_line(line):
-              line = line.strip()
-              
-              # Игнорируем все старые служебные строки (#...)
-              if not line or line.startswith('#'):
-                  return None
-                  
-              if not line.startswith("vless://"):
-                  return None
+          lines = fetch()
+          processed = []
+          counter = 1
 
-              # Разделяем базу и фрагмент (имя)
+          for line in lines:
+              line = line.strip()
+
+              # Пропускаем старые заголовки и пустые строки
+              if not line or line.startswith('#'):
+                  continue
+
+              if not line.startswith("vless://"):
+                  continue
+
+              # Разделяем базу и фрагмент
               if '#' in line:
                   base, fragment = line.split('#', 1)
               else:
                   base, fragment = line, ""
 
-              # Если есть LTE, оставляем имя как было
+              # LTE оставляем как есть
               if LTE_TAG in fragment:
-                  return line
-              
-              # Иначе меняем имя на "Бесплатно"
-              new_fragment = quote(NEW_NAME)
-              return f"{base}#{new_fragment}"
+                  processed.append(line)
+              else:
+                  # Нумеруем только не-LTE серверы
+                  new_name = f"{SERVER_PREFIX}{counter}"
+                  new_fragment = quote(new_name)
+                  processed.append(f"{base}#{new_fragment}")
+                  counter += 1
 
-          lines = fetch()
-          processed = []
-          
-          for l in lines:
-              res = process_line(l)
-              if res:
-                  processed.append(res)
-
-          # Собираем файл: Заголовок + Announce + пустая строка + серверы
           content = f"{HEADER_TITLE}\n{HEADER_ANNOUNCE}\n\n" + "\n".join(processed)
-          
+
           with open(OUTPUT, "w", encoding="utf-8") as f:
               f.write(content)
-          
-          print(f"Done. Processed {len(processed)} servers.")
+
+          print(f"Done. Renamed {counter - 1} servers, kept LTE as-is.")
           EOF
 
       - name: Commit and Push
@@ -85,4 +82,4 @@ jobs:
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
           git add working_configs.txt
-          git diff --quiet && git diff --staged --quiet || (git commit -m "Update: clean headers, set announce, renamed non-LTE to Free" && git push)
+          git diff --quiet && git diff --staged --quiet || (git commit -m "Update: clean announce, numbered non-LTE servers" && git push)
