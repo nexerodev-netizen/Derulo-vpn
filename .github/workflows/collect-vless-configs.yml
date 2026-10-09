@@ -20,22 +20,16 @@ jobs:
           python3 << 'EOF'
           import urllib.request
           from urllib.parse import quote
-          import time
 
           URL = "https://sub.vlessfo.ru/vlessforu/working_configs.txt"
           OUTPUT = "working_configs.txt"
 
-          # Генерируем expire: текущее время + 100 лет
-          # Если клиент глючит с датой, можно поставить просто очень далекое будущее, например 2099 год
-          # Но формула ниже дает ровно +100 лет от момента запуска
-          EXPIRE_TIMESTAMP = int(time.time()) + (100 * 365 * 24 * 3600)
+          # Фиксированная дата: 8 апреля 2100 года, 00:00:00 UTC
+          EXPIRE_TIMESTAMP = 4106592000
 
           HEADER_TITLE = "# profile-title: Платный впн"
           
-          # Значения трафика (в байтах):
-          # upload: 1 ГБ = 1073741824
-          # download: 50 ГБ = 53687091200
-          # total: 200 ГБ = 214748364800
+          # Трафик: upload=1GB, download=50GB, total=200GB
           HEADER_USERINFO = f"# subscription-userinfo: upload=1073741824; download=53687091200; total=214748364800; expire={EXPIRE_TIMESTAMP}"
           
           HEADER_ANNOUNCE = "# announce: 🔥 Серверов: 182 | Обновлено: 09.10.2026 11:02 | ⚠️ LTE/5G для крайних случаев! Без торрентов! | 🚀 Top: ~2891.4 Mbps, ~177 ms"
@@ -92,7 +86,7 @@ jobs:
           with open(OUTPUT, "w", encoding="utf-8") as f:
               f.write(content)
           
-          print(f"Done. Expire set to {EXPIRE_TIMESTAMP}. Renamed {counter - 1} servers.")
+          print(f"Done. Expire set to 08.04.2100 ({EXPIRE_TIMESTAMP}). Renamed {counter - 1} servers.")
           EOF
 
       - name: Commit and Push to Repo
@@ -100,4 +94,4 @@ jobs:
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
           git add working_configs.txt
-          git diff --quiet && git diff --staged --quiet || (git commit -m "Update: added userinfo, numbered non-LTE servers" && git push)
+          git diff --quiet && git diff --staged --quiet || (git commit -m "Update: fixed expire date to 08.04.2100, numbered non-LTE servers" && git push)
