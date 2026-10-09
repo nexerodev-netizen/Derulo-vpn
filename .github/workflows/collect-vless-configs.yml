@@ -6,22 +6,66 @@ on:
   workflow_dispatch:
 
 jobs:
-  update:
+  update-configs:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.x'
+      - name: Checkout repository
+        uses: actions/checkout@v3
 
-      - name: Process Configs
-        run: python main.py
+      - name: Process and Rename Servers
+        run: |
+          python3 << 'EOF'
+          import urllib.request
+          from urllib.parse import quote
 
-      - name: Commit Changes
+          URL = "https://sub.vlessfo.ru/vlessforu/working_configs.txt"
+          OUTPUT = "working_configs.txt"
+          TITLE = "# profile-title: Платный впн"
+          NEW_NAME = "Бесплатно"
+          LTE_TAG = "LTE"
+
+          def fetch():
+              try:
+                  with urllib.request.urlopen(URL) as resp:
+                      return resp.read().decode('utf-8').splitlines()
+              except Exception as e:
+                  print(f"Error: {e}")
+                  return []
+
+          def process_line(line):
+              line = line.strip()
+              if not line or not line.startswith("vless://"):
+                  return line
+              
+              # Разделяем базу и фрагмент (имя)
+              if '#' in line:
+                  base, fragment = line.split('#', 1)
+              else:
+                  base, fragment = line, ""
+
+              # Если есть LTE, оставляем как есть
+              if LTE_TAG in fragment:
+                  return line
+              
+              # Иначе меняем имя на "Бесплатно"
+              new_fragment = quote(NEW_NAME)
+              return f"{base}#{new_fragment}"
+
+          lines = fetch()
+          processed = [process_line(l) for l in lines if l.strip()]
+          
+          # Собираем итоговый файл: Заголовок + серверы
+          content = TITLE + "\n" + "\n".join(processed)
+          
+          with open(OUTPUT, "w", encoding="utf-8") as f:
+              f.write(content)
+          
+          print(f"Done. Processed {len(processed)} servers.")
+          EOF
+
+      - name: Commit and Push
         run: |
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
           git add working_configs.txt
-          git diff --quiet && git diff --staged --quiet || (git commit -m "Update configs: added title and renamed non-LTE nodes" && git push)
+          git diff --quiet && git diff --staged --quiet || (git commit -m "Update: added title and renamed non-LTE nodes" && git push)
