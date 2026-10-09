@@ -5,12 +5,19 @@ on:
     - cron: '0 */6 * * *'
   workflow_dispatch:
 
+# Разрешаем токену писать в репозиторий
+permissions:
+  contents: write
+
 jobs:
   update-configs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
+        with:
+          # Важно: оставляем историю для корректного коммита
+          fetch-depth: 1 
 
       - name: Process and Rename Servers
         run: |
