@@ -2,11 +2,11 @@ name: Update VLESS Aggregator
 
 on:
   schedule:
-    - cron: '0 */6 * * *'
-  workflow_dispatch:
+    - cron: '0 */6 * * *' # Каждые 6 часов
+  workflow_dispatch: # Ручной запуск
 
 permissions:
-  contents: write
+  contents: write # Разрешение на запись в репозиторий
 
 jobs:
   update-configs:
@@ -20,7 +20,6 @@ jobs:
           python3 << 'EOF'
           import urllib.request
           from urllib.parse import quote
-          import json
 
           URL = "https://sub.vlessfo.ru/vlessforu/working_configs.txt"
           OUTPUT = "working_configs.txt"
@@ -36,7 +35,7 @@ jobs:
                   with urllib.request.urlopen(URL) as resp:
                       return resp.read().decode('utf-8').splitlines()
               except Exception as e:
-                  print(f"Error: {e}")
+                  print(f"Error fetching data: {e}")
                   return []
 
           lines = fetch()
@@ -45,118 +44,42 @@ jobs:
 
           for line in lines:
               line = line.strip()
+              
+              # Пропускаем старые заголовки и пустые строки
               if not line or line.startswith('#'):
                   continue
+                  
               if not line.startswith("vless://"):
                   continue
 
+              # Разделяем базу и фрагмент (имя)
               if '#' in line:
                   base, fragment = line.split('#', 1)
               else:
                   base, fragment = line, ""
 
+              # Если есть LTE, оставляем как есть
               if LTE_TAG in fragment:
                   processed.append(line)
               else:
+                  # Нумеруем только не-LTE серверы
                   new_name = f"{SERVER_PREFIX}{counter}"
                   new_fragment = quote(new_name)
                   processed.append(f"{base}#{new_fragment}")
                   counter += 1
 
+          # Собираем итоговый файл
           content = f"{HEADER_TITLE}\n{HEADER_ANNOUNCE}\n\n" + "\n".join(processed)
           
           with open(OUTPUT, "w", encoding="utf-8") as f:
               f.write(content)
-              
-          # Сохраняем контент в отдельный файл для отправки в Gist
-          with open("gist_content.txt", "w", encoding="utf-8") as f:
-              f.write(content)
-              
-          print(f"Done. Renamed {counter - 1} servers.")
+          
+          print(f"Done. Renamed {counter - 1} servers, kept LTE as-is.")
           EOF
 
-      - name: Commit to Repo
+      - name: Commit and Push to Repo
         run: |
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
           git add working_configs.txt
           git diff --quiet && git diff --staged --quiet || (git commit -m "Update: clean announce, numbered non-LTE servers" && git push)
-
-      - name: Auto-Sync to Gist
-        env:
-          GIST_TOKEN: ${{ secrets.GIST_TOKEN }}
-        run: |
-          if [ -z "$GIST_TOKEN" ]; then
-            echo "Error: GIST_TOKEN secret is not set."
-            exit 1
-          fi
-
-          python3 << 'PYEOF'
-          import os
-          import json
-          import urllib.request
-
-          TOKEN = os.environ['GIST_TOKEN']
-          FILENAME = "working_configs.txt"
-          
-          # Читаем содержимое
-          with open("gist_content.txt", "r", encoding="utf-8") as f:
-              content = f.read()
-
-          headers = {
-              "Authorization": f"token {TOKEN}",
-              "Content-Type": "application/json",
-              "Accept": "application/vnd.github.v3+json"
-          }
-
-          # 1. Ищем существующий Gist по имени файла
-          # GitHub API не имеет прямого поиска по содержимому файлов гистов, 
-          # но мы можем получить список всех гистов пользователя и найти нужный.
-          req = urllib.request.Request("https://api.github.com/gists", headers=headers)
-          response = urllib.request.urlopen(req)
-          gists = json.loads(response.read().decode())
-
-          gist_id = None
-          for gist in gists:
-              if FILENAME in gist.get('files', {}):
-                  gist_id = gist['id']
-                  break
-
-          data = {
-              "description": "Auto-updated VLESS Configs",
-              "public": True,
-              "files": {
-                  FILENAME: {
-                      "content": content
-                  }
-              }
-          }
-
-          if gist_id:
-              # Обновляем существующий
-              print(f"Updating existing Gist: {gist_id}")
-              req = urllib.request.Request(
-                  f"https://api.github.com/gists/{gist_id}",
-                  data=json.dumps(data).encode(),
-                  headers=headers,
-                  method='PATCH'
-              )
-          else:
-              # Создаем новый
-              print("Creating new Gist...")
-              req = urllib.request.Request(
-                  "https://api.github.com/gists",
-                  data=json.dumps(data).encode(),
-                  headers=headers,
-                  method='POST'
-              )
-
-          try:
-              resp = urllib.request.urlopen(req)
-              result = json.loads(resp.read().decode())
-              print(f"Success! Gist URL: {result['html_url']}")
-              # Опционально: можно сохранить ID в репо, чтобы не искать каждый раз, 
-              # но поиск по списку гистов работает быстро, если их не тысячи.
-          except Exception as e:
-              print(f"Error updating Gist: {e}")
-          PYEOF
