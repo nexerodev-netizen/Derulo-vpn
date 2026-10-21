@@ -1892,31 +1892,6 @@
       "settings": {
         "vnext": [
           {
-            "address": "104.143.219.18",
-            "port": 3090,
-            "users": [
-              {
-                "id": "e9d65435-bee9-4140-978a-72877ae90472",
-                "encryption": "none"
-              }
-            ]
-          }
-        ]
-      },
-      "streamSettings": {
-        "network": "grpc",
-        "security": "none",
-        "grpcSettings": {
-          "serviceName": "vless"
-        }
-      }
-    },
-    {
-      "tag": "node-0061",
-      "protocol": "vless",
-      "settings": {
-        "vnext": [
-          {
             "address": "103.246.248.20",
             "port": 443,
             "users": [
@@ -1942,7 +1917,7 @@
       }
     },
     {
-      "tag": "node-0062",
+      "tag": "node-0061",
       "protocol": "vless",
       "settings": {
         "vnext": [
@@ -1973,7 +1948,7 @@
       }
     },
     {
-      "tag": "node-0063",
+      "tag": "node-0062",
       "protocol": "vless",
       "settings": {
         "vnext": [
@@ -2003,7 +1978,7 @@
       }
     },
     {
-      "tag": "node-0064",
+      "tag": "node-0063",
       "protocol": "vless",
       "settings": {
         "vnext": [
@@ -2034,32 +2009,7 @@
       }
     },
     {
-      "tag": "node-0065",
-      "protocol": "vless",
-      "settings": {
-        "vnext": [
-          {
-            "address": "104.143.219.171",
-            "port": 3090,
-            "users": [
-              {
-                "id": "e9d65435-bee9-4140-978a-72877ae90472",
-                "encryption": "none"
-              }
-            ]
-          }
-        ]
-      },
-      "streamSettings": {
-        "network": "grpc",
-        "security": "none",
-        "grpcSettings": {
-          "serviceName": "vless"
-        }
-      }
-    },
-    {
-      "tag": "node-0066",
+      "tag": "node-0064",
       "protocol": "vless",
       "settings": {
         "vnext": [
@@ -2092,7 +2042,7 @@
       }
     },
     {
-      "tag": "node-0067",
+      "tag": "node-0065",
       "protocol": "vless",
       "settings": {
         "vnext": [
@@ -2122,7 +2072,7 @@
       }
     },
     {
-      "tag": "node-0068",
+      "tag": "node-0066",
       "protocol": "vless",
       "settings": {
         "vnext": [
@@ -2154,7 +2104,7 @@
       }
     },
     {
-      "tag": "node-0069",
+      "tag": "node-0067",
       "protocol": "vless",
       "settings": {
         "vnext": [
@@ -2186,7 +2136,7 @@
       }
     },
     {
-      "tag": "node-0070",
+      "tag": "node-0068",
       "protocol": "vless",
       "settings": {
         "vnext": [
@@ -2216,7 +2166,7 @@
       }
     },
     {
-      "tag": "node-0071",
+      "tag": "node-0069",
       "protocol": "vless",
       "settings": {
         "vnext": [
@@ -2250,7 +2200,7 @@
       }
     },
     {
-      "tag": "node-0072",
+      "tag": "node-0070",
       "protocol": "vless",
       "settings": {
         "vnext": [
@@ -2281,7 +2231,7 @@
       }
     },
     {
-      "tag": "node-0073",
+      "tag": "node-0071",
       "protocol": "vless",
       "settings": {
         "vnext": [
@@ -2311,7 +2261,7 @@
       }
     },
     {
-      "tag": "node-0074",
+      "tag": "node-0072",
       "protocol": "vless",
       "settings": {
         "vnext": [
@@ -2341,7 +2291,7 @@
       }
     },
     {
-      "tag": "node-0075",
+      "tag": "node-0073",
       "protocol": "vless",
       "settings": {
         "vnext": [
@@ -2372,7 +2322,7 @@
       }
     },
     {
-      "tag": "node-0076",
+      "tag": "node-0074",
       "protocol": "vless",
       "settings": {
         "vnext": [
@@ -2402,7 +2352,7 @@
       }
     },
     {
-      "tag": "node-0077",
+      "tag": "node-0075",
       "protocol": "vless",
       "settings": {
         "vnext": [
@@ -2433,7 +2383,7 @@
       }
     },
     {
-      "tag": "node-0078",
+      "tag": "node-0076",
       "protocol": "vless",
       "settings": {
         "vnext": [
@@ -2463,7 +2413,7 @@
       }
     },
     {
-      "tag": "node-0079",
+      "tag": "node-0077",
       "protocol": "vless",
       "settings": {
         "vnext": [
@@ -2494,7 +2444,7 @@
       }
     },
     {
-      "tag": "node-0080",
+      "tag": "node-0078",
       "protocol": "vless",
       "settings": {
         "vnext": [
@@ -2524,7 +2474,7 @@
       }
     },
     {
-      "tag": "node-0081",
+      "tag": "node-0079",
       "protocol": "vless",
       "settings": {
         "vnext": [
@@ -2557,7 +2507,7 @@
       }
     },
     {
-      "tag": "node-0082",
+      "tag": "node-0080",
       "protocol": "vless",
       "settings": {
         "vnext": [
@@ -2589,7 +2539,7 @@
       }
     },
     {
-      "tag": "node-0083",
+      "tag": "node-0081",
       "protocol": "vless",
       "settings": {
         "vnext": [
@@ -2620,7 +2570,7 @@
       }
     },
     {
-      "tag": "node-0084",
+      "tag": "node-0082",
       "protocol": "vless",
       "settings": {
         "vnext": [
@@ -2653,7 +2603,7 @@
       }
     },
     {
-      "tag": "node-0085",
+      "tag": "node-0083",
       "protocol": "vless",
       "settings": {
         "vnext": [
@@ -2686,7 +2636,7 @@
       }
     },
     {
-      "tag": "node-0086",
+      "tag": "node-0084",
       "protocol": "vless",
       "settings": {
         "vnext": [
@@ -2718,7 +2668,7 @@
       }
     },
     {
-      "tag": "node-0087",
+      "tag": "node-0085",
       "protocol": "vless",
       "settings": {
         "vnext": [
@@ -2750,7 +2700,7 @@
       }
     },
     {
-      "tag": "node-0088",
+      "tag": "node-0086",
       "protocol": "vless",
       "settings": {
         "vnext": [
@@ -2782,7 +2732,7 @@
       }
     },
     {
-      "tag": "node-0089",
+      "tag": "node-0087",
       "protocol": "vless",
       "settings": {
         "vnext": [
@@ -2812,7 +2762,7 @@
       }
     },
     {
-      "tag": "node-0090",
+      "tag": "node-0088",
       "protocol": "vless",
       "settings": {
         "vnext": [
@@ -2843,7 +2793,7 @@
       }
     },
     {
-      "tag": "node-0091",
+      "tag": "node-0089",
       "protocol": "vless",
       "settings": {
         "vnext": [
@@ -2877,7 +2827,7 @@
       }
     },
     {
-      "tag": "node-0092",
+      "tag": "node-0090",
       "protocol": "vless",
       "settings": {
         "vnext": [
@@ -2907,7 +2857,7 @@
       }
     },
     {
-      "tag": "node-0093",
+      "tag": "node-0091",
       "protocol": "vless",
       "settings": {
         "vnext": [
@@ -2938,7 +2888,7 @@
       }
     },
     {
-      "tag": "node-0094",
+      "tag": "node-0092",
       "protocol": "vless",
       "settings": {
         "vnext": [
@@ -2968,7 +2918,7 @@
       }
     },
     {
-      "tag": "node-0095",
+      "tag": "node-0093",
       "protocol": "vless",
       "settings": {
         "vnext": [
@@ -2998,7 +2948,7 @@
       }
     },
     {
-      "tag": "node-0096",
+      "tag": "node-0094",
       "protocol": "vless",
       "settings": {
         "vnext": [
@@ -3030,7 +2980,7 @@
       }
     },
     {
-      "tag": "node-0097",
+      "tag": "node-0095",
       "protocol": "vless",
       "settings": {
         "vnext": [
@@ -3062,7 +3012,7 @@
       }
     },
     {
-      "tag": "node-0098",
+      "tag": "node-0096",
       "protocol": "vless",
       "settings": {
         "vnext": [
@@ -3093,7 +3043,7 @@
       }
     },
     {
-      "tag": "node-0099",
+      "tag": "node-0097",
       "protocol": "vless",
       "settings": {
         "vnext": [
@@ -3127,7 +3077,7 @@
       }
     },
     {
-      "tag": "node-0100",
+      "tag": "node-0098",
       "protocol": "vless",
       "settings": {
         "vnext": [
@@ -3157,7 +3107,7 @@
       }
     },
     {
-      "tag": "node-0101",
+      "tag": "node-0099",
       "protocol": "vless",
       "settings": {
         "vnext": [
@@ -3191,7 +3141,7 @@
       }
     },
     {
-      "tag": "node-0102",
+      "tag": "node-0100",
       "protocol": "vless",
       "settings": {
         "vnext": [
@@ -3222,7 +3172,7 @@
       }
     },
     {
-      "tag": "node-0103",
+      "tag": "node-0101",
       "protocol": "vless",
       "settings": {
         "vnext": [
@@ -3254,7 +3204,7 @@
       }
     },
     {
-      "tag": "node-0104",
+      "tag": "node-0102",
       "protocol": "vless",
       "settings": {
         "vnext": [
@@ -3285,7 +3235,7 @@
       }
     },
     {
-      "tag": "node-0105",
+      "tag": "node-0103",
       "protocol": "vless",
       "settings": {
         "vnext": [
@@ -3317,7 +3267,7 @@
       }
     },
     {
-      "tag": "node-0106",
+      "tag": "node-0104",
       "protocol": "vless",
       "settings": {
         "vnext": [
@@ -3349,7 +3299,7 @@
       }
     },
     {
-      "tag": "node-0107",
+      "tag": "node-0105",
       "protocol": "vless",
       "settings": {
         "vnext": [
@@ -3381,7 +3331,7 @@
       }
     },
     {
-      "tag": "node-0108",
+      "tag": "node-0106",
       "protocol": "vless",
       "settings": {
         "vnext": [
@@ -3411,7 +3361,7 @@
       }
     },
     {
-      "tag": "node-0109",
+      "tag": "node-0107",
       "protocol": "vless",
       "settings": {
         "vnext": [
@@ -3442,7 +3392,7 @@
       }
     },
     {
-      "tag": "node-0110",
+      "tag": "node-0108",
       "protocol": "vless",
       "settings": {
         "vnext": [
@@ -3474,7 +3424,7 @@
       }
     },
     {
-      "tag": "node-0111",
+      "tag": "node-0109",
       "protocol": "vless",
       "settings": {
         "vnext": [
@@ -3504,7 +3454,7 @@
       }
     },
     {
-      "tag": "node-0112",
+      "tag": "node-0110",
       "protocol": "vless",
       "settings": {
         "vnext": [
@@ -3561,7 +3511,7 @@
         "protocol": [
           "bittorrent"
         ],
-        "outboundTag": "auto"
+        "outboundTag": "direct"
       },
       {
         "type": "field",
@@ -3569,8 +3519,8 @@
           "domain:2ip.ru",
           "domain:2ip.io",
           "domain:whoer.net",
-          "domain:yoomoney.ru",
-          "domain:browserleaks.com"
+          "domain:browserleaks.com",
+          "domain:yoomoney.ru"
         ],
         "balancerTag": "auto"
       },
@@ -3610,7 +3560,6 @@
         "selector": [
           "node-"
         ],
-        "fallbackTag": "node-0001",
         "strategy": {
           "type": "leastPing"
         }
