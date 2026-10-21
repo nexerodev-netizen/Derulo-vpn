@@ -1,5 +1,5 @@
 
-name: Build Xray Auto Config
+name: Build Xray Config
 
 on:
   workflow_dispatch:
@@ -12,59 +12,78 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Generate config.json
         env:
           SOURCE: https://sub.vlessfo.ru/vlessforu/working_configs.txt
         run: |
           cat > /tmp/build.py <<'PYEOF'
-          import json, os, urllib.request
+          import json
+          import os
+          import urllib.request
           from urllib.parse import urlsplit, parse_qs, unquote
 
           req = urllib.request.Request(
               os.environ["SOURCE"],
               headers={"User-Agent": "Mozilla/5.0"}
           )
-          with urllib.request.urlopen(req, timeout=40) as r:
-              source = r.read().decode("utf-8-sig")
 
-          def parse(line, i):
+          with urllib.request.urlopen(req, timeout=40) as response:
+              source = response.read().decode("utf-8-sig")
+
+          def parse_vless(line, index):
               try:
                   u = urlsplit(line.strip())
+
                   if u.scheme != "vless" or not u.hostname or not u.port:
                       return None
 
                   q = parse_qs(u.query)
-                  def get(k, default=""):
-                      return q.get(k, [default])[0]
+
+                  def get(key, default=""):
+                      return q.get(key, [default])[0]
 
                   security = get("security", "none")
                   network = get("type", "tcp")
                   server = u.hostname
 
+                  # Не добавляем VLESS без TLS/Reality.
+                  if security not in ("tls", "reality"):
+                      return None
+
+                  user_id = unquote(u.username or "")
+                  if not user_id:
+                      return None
+
                   user = {
-                      "id": unquote(u.username or ""),
+                      "id": user_id,
                       "encryption": get("encryption", "none")
                   }
-                  if not user["id"]:
-                      return None
+
                   if get("flow"):
                       user["flow"] = get("flow")
 
-                  stream = {"network": network, "security": security}
+                  stream = {
+                      "network": network,
+                      "security": security
+                  }
 
                   if security == "reality":
                       if not get("pbk"):
                           return None
+
                       stream["realitySettings"] = {
                           "serverName": get("sni", server),
                           "fingerprint": get("fp", "firefox"),
                           "publicKey": get("pbk"),
                           "shortId": get("sid")
                       }
-                  elif security == "tls":
+
+                  if security == "tls":
                       stream["tlsSettings"] = {
                           "serverName": get("sni", server),
                           "fingerprint": get("fp", "firefox"),
@@ -77,6 +96,7 @@ jobs:
                           stream["tcpSettings"]["header"] = {
                               "type": get("headerType")
                           }
+
                   elif network == "ws":
                       stream["wsSettings"] = {
                           "path": get("path", "/")
@@ -85,69 +105,49 @@ jobs:
                           stream["wsSettings"]["headers"] = {
                               "Host": get("host")
                           }
+
                   elif network == "grpc":
                       stream["grpcSettings"] = {
                           "serviceName": get("serviceName")
                       }
+
                   elif network == "xhttp":
                       stream["xhttpSettings"] = {
                           "path": get("path", "/"),
                           "mode": get("mode", "auto")
                       }
-                  elif network != "httpupgrade":
-                      if network != "kcp":
-                          return None
 
-                  if network == "httpupgrade":
-                      stream["httpupgradeSettings"] = {
-                          "path": get("path", "/"),
-                          "host": get("host")
-                      }
-                  elif network == "kcp":
-                      stream["kcpSettings"] = {
-                          "header": {"type": get("headerType", "none")}
-                      }
+                  else:
+                      return None
 
                   return {
-                      "tag": f"node-{i:04}",
+                      "tag": f"node-{index:04}",
                       "protocol": "vless",
-                      "settings": {"vnext": [{
-                          "address": server,
-                          "port": u.port,
-                          "users": [user]
-                      }]},
+                      "settings": {
+                          "vnext": [{
+                              "address": server,
+                              "port": u.port,
+                              "users": [user]
+                          }]
+                      },
                       "streamSettings": stream
                   }
+
               except (ValueError, TypeError):
                   return None
 
           nodes = []
+
           for line in source.splitlines():
               if line.strip().startswith("vless://"):
-                  node = parse(line, len(nodes) + 1)
+                  node = parse_vless(line, len(nodes) + 1)
                   if node:
                       nodes.append(node)
 
           if not nodes:
-              raise SystemExit("No valid VLESS servers; preserving previous config")
-
-          rules = [
-              {"type": "field", "protocol": ["bittorrent"],
-               "outboundTag": "auto"},
-              {"type": "field", "domain": [
-                  "domain:2ip.ru", "domain:2ip.io", "domain:whoer.net",
-                  "domain:yoomoney.ru", "domain:browserleaks.com"
-              ], "balancerTag": "auto"},
-              {"type": "field", "domain": [
-                  "geosite:category-ru", "domain:ru", "domain:su"
-              ], "outboundTag": "direct"},
-              {"type": "field", "ip": [
-                  "10.0.0.0/8", "100.64.0.0/10", "127.0.0.0/8",
-                  "169.254.0.0/16", "172.16.0.0/12",
-                  "192.168.0.0/16", "::1/128", "fc00::/7", "fe80::/10"
-              ], "outboundTag": "direct"},
-              {"type": "field", "network": "tcp,udp", "balancerTag": "auto"}
-          ]
+              raise SystemExit(
+                  "No valid TLS/Reality VLESS servers; config not replaced."
+              )
 
           config = {
               "remarks": "🇪🇺⚡Авто выбор",
@@ -158,20 +158,29 @@ jobs:
               },
               "inbounds": [
                   {
-                      "tag": "socks", "port": 10808,
-                      "listen": "127.0.0.1", "protocol": "socks",
-                      "settings": {"udp": True, "auth": "noauth"},
+                      "tag": "socks",
+                      "port": 10808,
+                      "listen": "127.0.0.1",
+                      "protocol": "socks",
+                      "settings": {
+                          "udp": True,
+                          "auth": "noauth"
+                      },
                       "sniffing": {
-                          "enabled": True, "routeOnly": False,
+                          "enabled": True,
+                          "routeOnly": False,
                           "destOverride": ["http", "tls", "quic"]
                       }
                   },
                   {
-                      "tag": "http", "port": 10809,
-                      "listen": "127.0.0.1", "protocol": "http",
+                      "tag": "http",
+                      "port": 10809,
+                      "listen": "127.0.0.1",
+                      "protocol": "http",
                       "settings": {"allowTransparent": False},
                       "sniffing": {
-                          "enabled": True, "routeOnly": False,
+                          "enabled": True,
+                          "routeOnly": False,
                           "destOverride": ["http", "tls", "quic"]
                       }
                   }
@@ -189,21 +198,71 @@ jobs:
               "routing": {
                   "domainMatcher": "hybrid",
                   "domainStrategy": "IPIfNonMatch",
-                  "rules": rules,
+                  "rules": [
+                      {
+                          "type": "field",
+                          "protocol": ["bittorrent"],
+                          "outboundTag": "direct"
+                      },
+                      {
+                          "type": "field",
+                          "domain": [
+                              "domain:2ip.ru",
+                              "domain:2ip.io",
+                              "domain:whoer.net",
+                              "domain:browserleaks.com",
+                              "domain:yoomoney.ru"
+                          ],
+                          "balancerTag": "auto"
+                      },
+                      {
+                          "type": "field",
+                          "domain": [
+                              "geosite:category-ru",
+                              "domain:ru",
+                              "domain:su"
+                          ],
+                          "outboundTag": "direct"
+                      },
+                      {
+                          "type": "field",
+                          "ip": [
+                              "10.0.0.0/8",
+                              "100.64.0.0/10",
+                              "127.0.0.0/8",
+                              "169.254.0.0/16",
+                              "172.16.0.0/12",
+                              "192.168.0.0/16",
+                              "::1/128",
+                              "fc00::/7",
+                              "fe80::/10"
+                          ],
+                          "outboundTag": "direct"
+                      },
+                      {
+                          "type": "field",
+                          "network": "tcp,udp",
+                          "balancerTag": "auto"
+                      }
+                  ],
                   "balancers": [{
                       "tag": "auto",
                       "selector": ["node-"],
-                      "fallbackTag": nodes[0]["tag"],
                       "strategy": {"type": "leastPing"}
                   }]
               }
           }
 
-          with open("config.json", "w", encoding="utf-8") as f:
+          # Записываем сначала временный файл.
+          with open("config.json.tmp", "w", encoding="utf-8") as f:
               json.dump(config, f, ensure_ascii=False, indent=2)
               f.write("\n")
 
-          print(f"Generated config.json with {len(nodes)} servers")
+          with open("config.json.tmp", encoding="utf-8") as f:
+              json.load(f)
+
+          os.replace("config.json.tmp", "config.json")
+          print(f"Generated config.json: {len(nodes)} nodes")
           PYEOF
 
           python /tmp/build.py
@@ -212,9 +271,12 @@ jobs:
       - name: Commit config.json
         run: |
           git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.email \
+            "41898282+github-actions[bot]@users.noreply.github.com"
+
           git add config.json
+
           if ! git diff --cached --quiet; then
-            git commit -m "Update Xray auto config"
+            git commit -m "Update Xray config"
             git push
           fi
