@@ -1,5 +1,5 @@
 
-name: Build Xray Config
+name: Update Xray Config
 
 on:
   workflow_dispatch:
@@ -9,246 +9,310 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: update-xray-config
+  cancel-in-progress: false
+
 jobs:
-  build:
+  update:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
       - name: Generate config.json
         env:
-          SOURCE: https://sub.vlessfo.ru/vlessforu/working_configs.txt
+          SUB_URL: https://sub.vlessfo.ru/vlessforu/working_configs.txt
         run: |
-          cat > /tmp/build.py <<'PYEOF'
+          cat > /tmp/build_config.py <<'PY'
+          import base64
+          import copy
           import json
           import os
           import re
+          import sys
           import urllib.request
           from urllib.parse import urlsplit, parse_qs, unquote
 
-          req = urllib.request.Request(
-              os.environ["SOURCE"],
-              headers={"User-Agent": "Mozilla/5.0"}
-          )
-          with urllib.request.urlopen(req, timeout=40) as r:
-              source = r.read().decode("utf-8-sig")
+          SUB_URL = os.environ["SUB_URL"]
 
-          def parse_vless(line, index):
+          def param(q, key, default=""):
+              return q.get(key, [default])[0]
+
+          def parse_link(line):
+              line = line.strip().rstrip(",;)")
+              if not line.lower().startswith("vless://"):
+                  return None
+
               try:
-                  line = line.strip()
                   u = urlsplit(line)
-                  if u.scheme != "vless" or not u.hostname or not u.port:
+                  q = parse_qs(u.query, keep_blank_values=True)
+
+                  host = u.hostname
+                  port = u.port
+                  user_id = unquote(u.username or "")
+                  name = unquote(u.fragment or "").strip()
+
+                  if not host or not port or not user_id:
                       return None
 
-                  query = parse_qs(u.query)
-                  get = lambda k, d="": query.get(k, [d])[0]
-                  security = get("security", "none")
-                  network = get("type", "tcp")
+                  security = param(q, "security", "none").lower()
+                  network = param(q, "type", "tcp").lower()
 
+                  # Skip unencrypted or unsupported links.
                   if security not in ("tls", "reality"):
                       return None
-
-                  uid = unquote(u.username or "")
-                  if not uid:
+                  if network not in ("tcp", "ws", "grpc", "xhttp"):
                       return None
-
-                  user = {
-                      "id": uid,
-                      "encryption": get("encryption", "none")
-                  }
-                  if get("flow"):
-                      user["flow"] = get("flow")
 
                   stream = {
                       "network": network,
                       "security": security
                   }
 
-                  if security == "reality":
-                      if not get("pbk"):
+                  if security == "tls":
+                      tls = {}
+                      sni = param(q, "sni") or param(q, "serverName")
+                      fp = param(q, "fp")
+                      alpn = param(q, "alpn")
+
+                      if sni:
+                          tls["serverName"] = sni
+                      if fp:
+                          tls["fingerprint"] = fp
+                      if alpn:
+                          tls["alpn"] = alpn.split(",")
+
+                      stream["tlsSettings"] = tls
+
+                  else:
+                      pbk = param(q, "pbk") or param(q, "publicKey")
+                      if not pbk:
                           return None
-                      stream["realitySettings"] = {
-                          "serverName": get("sni", u.hostname),
-                          "fingerprint": get("fp", "firefox"),
-                          "publicKey": get("pbk"),
-                          "shortId": get("sid")
-                      }
-                  else:
-                      stream["tlsSettings"] = {
-                          "serverName": get("sni", u.hostname),
-                          "fingerprint": get("fp", "firefox"),
-                          "allowInsecure": get("allowInsecure", "0") == "1"
+
+                      reality = {
+                          "publicKey": pbk,
+                          "fingerprint": param(q, "fp", "chrome")
                       }
 
-                  if network == "tcp":
-                      stream["tcpSettings"] = {}
-                      if get("headerType"):
-                          stream["tcpSettings"]["header"] = {
-                              "type": get("headerType")
-                          }
-                  elif network == "ws":
-                      stream["wsSettings"] = {
-                          "path": get("path", "/")
-                      }
-                      if get("host"):
-                          stream["wsSettings"]["headers"] = {
-                              "Host": get("host")
-                          }
+                      sni = param(q, "sni") or param(q, "serverName")
+                      sid = param(q, "sid") or param(q, "shortId")
+                      spx = param(q, "spx")
+
+                      if sni:
+                          reality["serverName"] = sni
+                      if sid:
+                          reality["shortId"] = sid
+                      if spx:
+                          reality["spiderX"] = unquote(spx)
+
+                      stream["realitySettings"] = reality
+
+                  if network == "ws":
+                      ws = {"path": param(q, "path", "/")}
+                      ws_host = param(q, "host")
+                      if ws_host:
+                          ws["headers"] = {"Host": ws_host}
+                      stream["wsSettings"] = ws
+
                   elif network == "grpc":
-                      stream["grpcSettings"] = {
-                          "serviceName": get("serviceName")
-                      }
+                      service = param(q, "serviceName") or param(q, "path").strip("/")
+                      stream["grpcSettings"] = {"serviceName": service}
+
                   elif network == "xhttp":
-                      stream["xhttpSettings"] = {
-                          "path": get("path", "/"),
-                          "mode": get("mode", "auto")
-                      }
-                  else:
-                      return None
+                      xhttp = {}
+                      path = param(q, "path")
+                      host_header = param(q, "host")
+                      mode = param(q, "mode")
+                      if path:
+                          xhttp["path"] = path
+                      if host_header:
+                          xhttp["host"] = host_header
+                      if mode:
+                          xhttp["mode"] = mode
+                      stream["xhttpSettings"] = xhttp
 
-                  fragment = unquote(u.fragment or "")
-                  tag = f"node-{index:04}"
+                  elif network == "tcp":
+                      header_type = param(q, "headerType", "none")
+                      if header_type and header_type != "none":
+                          stream["tcpSettings"] = {
+                              "header": {"type": header_type}
+                          }
 
-                  return {
-                      "tag": tag,
+                  user = {
+                      "id": user_id,
+                      "encryption": param(q, "encryption", "none")
+                  }
+                  flow = param(q, "flow")
+                  if flow:
+                      user["flow"] = flow
+
+                  outbound = {
                       "protocol": "vless",
                       "settings": {
                           "vnext": [{
-                              "address": u.hostname,
-                              "port": u.port,
+                              "address": host,
+                              "port": port,
                               "users": [user]
                           }]
                       },
-                      "streamSettings": stream,
-                      "_name": fragment,
-                      "_source": line
+                      "streamSettings": stream
                   }
-              except (ValueError, TypeError):
+
+                  return {
+                      "name": name or f"{host}:{port}",
+                      "outbound": outbound
+                  }
+
+              except Exception:
                   return None
 
-          parsed = []
+          request = urllib.request.Request(
+              SUB_URL,
+              headers={"User-Agent": "Mozilla/5.0"}
+          )
+
+          with urllib.request.urlopen(request, timeout=45) as response:
+              raw = response.read().decode("utf-8-sig", errors="replace")
+
+          # Also accept base64-encoded subscription files.
+          text = raw
+          if "vless://" not in raw.lower():
+              compact = re.sub(r"\s+", "", raw)
+              try:
+                  candidate = base64.b64decode(
+                      compact + "=" * (-len(compact) % 4)
+                  ).decode("utf-8-sig", errors="replace")
+                  if "vless://" in candidate.lower():
+                      text = candidate
+              except Exception:
+                  pass
+
+          links = re.findall(r"vless://[^\s\"'<>]+", text, flags=re.I)
+
+          servers = []
           seen = set()
 
-          for line in source.splitlines():
-              if not line.strip().startswith("vless://"):
+          for link in links:
+              server = parse_link(link)
+              if not server:
                   continue
-              node = parse_vless(line, len(parsed) + 1)
-              if node and node["_source"] not in seen:
-                  seen.add(node["_source"])
-                  parsed.append(node)
 
-          if not parsed:
-              raise SystemExit("No valid TLS/Reality servers; old config preserved.")
+              identity = json.dumps(
+                  server["outbound"],
+                  sort_keys=True,
+                  ensure_ascii=False
+              )
+              if identity in seen:
+                  continue
 
-          # Keep names only for classification, not in final outbounds.
-          lte_nodes = []
-          ru_nodes = []
-          normal_nodes = []
+              seen.add(identity)
+              servers.append(server)
 
-          for node in parsed:
-              name = node.pop("_name").lower()
-              node.pop("_source", None)
+          if not servers:
+              sys.exit(
+                  "No usable TLS/REALITY VLESS links found. "
+                  "Existing config.json was not changed."
+              )
 
-              if re.search(r"(^|[^a-z])lte([^a-z]|$)", name):
-                  lte_nodes.append(node)
-              elif any(x in name for x in ("🇷🇺", "россия", "russia", "ru")):
-                  ru_nodes.append(node)
-                  normal_nodes.append(node)
-              else:
-                  normal_nodes.append(node)
+          # Group membership is based ONLY on the original link name.
+          normal = [
+              s for s in servers
+              if "lte" not in s["name"].lower()
+          ]
 
-          # The general pool excludes LTE. The RU pool is independent.
-          groups = {
-              "auto": normal_nodes,
-              "auto-lte": lte_nodes,
-              "auto-ru": ru_nodes
-          }
+          lte = [
+              s for s in servers
+              if "lte" in s["name"].lower()
+          ]
 
-          outbounds = []
-          for group_nodes in groups.values():
-              for node in group_nodes:
-                  if not any(x["tag"] == node["tag"] for x in outbounds):
-                      outbounds.append(node)
+          youtube = [
+              s for s in servers
+              if "🇷🇺" in s["name"]
+          ]
 
-          outbounds.extend([
+          if not normal:
+              sys.exit(
+                  "No non-LTE servers available for Auto selection. "
+                  "Existing config.json was not changed."
+              )
+
+          outbounds = [
               {"tag": "direct", "protocol": "freedom"},
               {"tag": "block", "protocol": "blackhole"}
-          ])
+          ]
 
-          balancers = []
-          for tag, group_nodes in groups.items():
-              if group_nodes:
-                  balancers.append({
-                      "tag": tag,
-                      "selector": [group_nodes[0]["tag"]],
-                      "fallbackTag": group_nodes[0]["tag"],
-                      "strategy": {"type": "leastPing"}
-                  })
+          def add_servers(items, internal_prefix, display_prefix="", suffix=""):
+              for index, server in enumerate(items, start=1):
+                  outbound = copy.deepcopy(server["outbound"])
 
-          # Use prefix selectors to include every node in each group.
-          # Tags are generated in group-specific form for unambiguous routing.
-          # Reassign tags based on their pools.
-          for tag, group_nodes in groups.items():
-              for i, node in enumerate(group_nodes, 1):
-                  node["tag"] = f"{tag}-{i:04}"
+                  # The internal tag is used by Xray for routing.
+                  # The original link name is preserved in the readable tag.
+                  outbound["tag"] = (
+                      f"{internal_prefix}{index:04d} | "
+                      f"{display_prefix}{server['name']}{suffix}"
+                  )
+                  outbounds.append(outbound)
 
-          # Rebuild balancers after assigning unique group tags.
-          balancers = []
-          for tag, group_nodes in groups.items():
-              if group_nodes:
-                  balancers.append({
-                      "tag": tag,
-                      "selector": [tag + "-"],
-                      "fallbackTag": group_nodes[0]["tag"],
-                      "strategy": {"type": "leastPing"}
-                  })
+          add_servers(
+              normal,
+              "auto-eu-",
+              display_prefix="🇪🇺 "
+          )
 
-          # De-duplicate outbounds by tag after pool tagging.
-          outbounds = []
-          for group_nodes in groups.values():
-              for node in group_nodes:
-                  if not any(x["tag"] == node["tag"] for x in outbounds):
-                      outbounds.append(node)
-          outbounds.extend([
-              {"tag": "direct", "protocol": "freedom"},
-              {"tag": "block", "protocol": "blackhole"}
-          ])
+          add_servers(
+              lte,
+              "auto-lte-",
+              display_prefix="🇪🇺 ",
+              suffix=" 🏳️"
+          )
+
+          add_servers(
+              youtube,
+              "auto-yt-",
+              display_prefix="🇪🇺 "
+          )
+
+          balancers = [
+              {
+                  "tag": "🇪🇺 Авто выбор",
+                  "selector": ["auto-eu-"],
+                  "strategy": {"type": "leastPing"}
+              }
+          ]
+
+          if lte:
+              balancers.append({
+                  "tag": "🇪🇺 Авто-LTE🏳️",
+                  "selector": ["auto-lte-"],
+                  "strategy": {"type": "leastPing"}
+              })
+
+          if youtube:
+              balancers.append({
+                  "tag": "🇪🇺 Авто-YouTube без рекламы",
+                  "selector": ["auto-yt-"],
+                  "strategy": {"type": "leastPing"}
+              })
 
           rules = [
               {
                   "type": "field",
                   "protocol": ["bittorrent"],
                   "outboundTag": "direct"
-              }
-          ]
-
-          if groups["auto-ru"]:
-              rules.append({
-                  "type": "field",
-                  "domain": [
-                      "domain:youtube.com",
-                      "domain:googlevideo.com",
-                      "domain:ytimg.com",
-                      "domain:youtubei.googleapis.com"
-                  ],
-                  "balancerTag": "auto-ru"
-              })
-
-          if groups["auto"]:
-              rules.append({
+              },
+              {
                   "type": "field",
                   "domain": [
                       "domain:2ip.ru",
                       "domain:2ip.io",
                       "domain:whoer.net",
-                      "domain:browserleaks.com",
-                      "domain:yoomoney.ru"
+                      "domain:yoomoney.ru",
+                      "domain:browserleaks.com"
                   ],
-                  "balancerTag": "auto"
-              })
-
-          rules.extend([
+                  "balancerTag": "🇪🇺 Авто выбор"
+              },
               {
                   "type": "field",
                   "domain": [
@@ -273,18 +337,39 @@ jobs:
                   ],
                   "outboundTag": "direct"
               }
-          ])
+          ]
 
-          if groups["auto"]:
-              rules.append({
+          # Route YouTube through its own pool when Russian-flagged nodes exist.
+          if youtube:
+              rules.insert(0, {
                   "type": "field",
-                  "network": "tcp,udp",
-                  "balancerTag": "auto"
+                  "domain": [
+                      "domain:youtube.com",
+                      "domain:youtu.be",
+                      "domain:googlevideo.com",
+                      "domain:ytimg.com",
+                      "domain:youtubei.googleapis.com"
+                  ],
+                  "balancerTag": "🇪🇺 Авто-YouTube без рекламы"
               })
 
+          rules.append({
+              "type": "field",
+              "network": "tcp,udp",
+              "balancerTag": "🇪🇺 Авто выбор"
+          })
+
+          selectors = ["auto-eu-"]
+          if lte:
+              selectors.append("auto-lte-")
+          if youtube:
+              selectors.append("auto-yt-")
+
           config = {
-              "remarks": "🇪🇺⚡Авто выбор",
-              "log": {"loglevel": "warning"},
+              "remarks": "🇪🇺 Авто выбор",
+              "log": {
+                  "loglevel": "warning"
+              },
               "dns": {
                   "servers": ["1.1.1.1", "1.0.0.1"],
                   "queryStrategy": "UseIP"
@@ -295,7 +380,10 @@ jobs:
                       "port": 10808,
                       "listen": "127.0.0.1",
                       "protocol": "socks",
-                      "settings": {"udp": True, "auth": "noauth"},
+                      "settings": {
+                          "udp": True,
+                          "auth": "noauth"
+                      },
                       "sniffing": {
                           "enabled": True,
                           "routeOnly": False,
@@ -307,7 +395,10 @@ jobs:
                       "port": 10809,
                       "listen": "127.0.0.1",
                       "protocol": "http",
-                      "settings": {"allowTransparent": False},
+                      "settings": {
+                          "allowTransparent": False,
+                          "auth": "noauth"
+                      },
                       "sniffing": {
                           "enabled": True,
                           "routeOnly": False,
@@ -316,44 +407,43 @@ jobs:
                   }
               ],
               "outbounds": outbounds,
-              "observatory": {
-                  "subjectSelector": ["auto-", "auto-lte-", "auto-ru-"],
-                  "probeUrl": "https://www.gstatic.com/generate_204",
-                  "probeInterval": "1m",
-                  "enableConcurrency": True
-              },
               "routing": {
                   "domainMatcher": "hybrid",
                   "domainStrategy": "IPIfNonMatch",
                   "rules": rules,
                   "balancers": balancers
+              },
+              "observatory": {
+                  "subjectSelector": selectors,
+                  "probeUrl": "https://www.google.com/generate_204",
+                  "probeInterval": "1m",
+                  "enableConcurrency": True
               }
           }
 
-          with open("config.json.tmp", "w", encoding="utf-8") as f:
+          with open("config.json", "w", encoding="utf-8") as f:
               json.dump(config, f, ensure_ascii=False, indent=2)
               f.write("\n")
 
-          with open("config.json.tmp", encoding="utf-8") as f:
-              json.load(f)
+          print(f"Parsed valid servers: {len(servers)}")
+          print(f"🇪🇺 Авто выбор: {len(normal)}")
+          print(f"🇪🇺 Авто-LTE🏳️: {len(lte)}")
+          print(f"🇪🇺 Авто-YouTube без рекламы: {len(youtube)}")
+          PY
 
-          os.replace("config.json.tmp", "config.json")
-
-          print(
-              f"Total: {len(parsed)}, normal: {len(groups['auto'])}, "
-              f"LTE: {len(groups['auto-lte'])}, RU: {len(groups['auto-ru'])}"
-          )
-          PYEOF
-
-          python /tmp/build.py
+          python /tmp/build_config.py
           python -m json.tool config.json > /dev/null
 
       - name: Commit config.json
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add config.json
-          if ! git diff --cached --quiet; then
-            git commit -m "Update Xray config"
-            git push
+          git add -- config.json
+
+          if git diff --cached --quiet; then
+            echo "config.json unchanged."
+            exit 0
           fi
+
+          git commit -m "Update config.json"
+          git push
