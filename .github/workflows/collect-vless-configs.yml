@@ -14,8 +14,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Generate config.json
         env:
@@ -24,6 +23,7 @@ jobs:
           cat > /tmp/build.py <<'PYEOF'
           import json
           import os
+          import re
           import urllib.request
           from urllib.parse import urlsplit, parse_qs, unquote
 
@@ -31,39 +31,32 @@ jobs:
               os.environ["SOURCE"],
               headers={"User-Agent": "Mozilla/5.0"}
           )
-
-          with urllib.request.urlopen(req, timeout=40) as response:
-              source = response.read().decode("utf-8-sig")
+          with urllib.request.urlopen(req, timeout=40) as r:
+              source = r.read().decode("utf-8-sig")
 
           def parse_vless(line, index):
               try:
-                  u = urlsplit(line.strip())
-
+                  line = line.strip()
+                  u = urlsplit(line)
                   if u.scheme != "vless" or not u.hostname or not u.port:
                       return None
 
-                  q = parse_qs(u.query)
-
-                  def get(key, default=""):
-                      return q.get(key, [default])[0]
-
+                  query = parse_qs(u.query)
+                  get = lambda k, d="": query.get(k, [d])[0]
                   security = get("security", "none")
                   network = get("type", "tcp")
-                  server = u.hostname
 
-                  # Не добавляем VLESS без TLS/Reality.
                   if security not in ("tls", "reality"):
                       return None
 
-                  user_id = unquote(u.username or "")
-                  if not user_id:
+                  uid = unquote(u.username or "")
+                  if not uid:
                       return None
 
                   user = {
-                      "id": user_id,
+                      "id": uid,
                       "encryption": get("encryption", "none")
                   }
-
                   if get("flow"):
                       user["flow"] = get("flow")
 
@@ -75,17 +68,15 @@ jobs:
                   if security == "reality":
                       if not get("pbk"):
                           return None
-
                       stream["realitySettings"] = {
-                          "serverName": get("sni", server),
+                          "serverName": get("sni", u.hostname),
                           "fingerprint": get("fp", "firefox"),
                           "publicKey": get("pbk"),
                           "shortId": get("sid")
                       }
-
-                  if security == "tls":
+                  else:
                       stream["tlsSettings"] = {
-                          "serverName": get("sni", server),
+                          "serverName": get("sni", u.hostname),
                           "fingerprint": get("fp", "firefox"),
                           "allowInsecure": get("allowInsecure", "0") == "1"
                       }
@@ -96,7 +87,6 @@ jobs:
                           stream["tcpSettings"]["header"] = {
                               "type": get("headerType")
                           }
-
                   elif network == "ws":
                       stream["wsSettings"] = {
                           "path": get("path", "/")
@@ -105,49 +95,192 @@ jobs:
                           stream["wsSettings"]["headers"] = {
                               "Host": get("host")
                           }
-
                   elif network == "grpc":
                       stream["grpcSettings"] = {
                           "serviceName": get("serviceName")
                       }
-
                   elif network == "xhttp":
                       stream["xhttpSettings"] = {
                           "path": get("path", "/"),
                           "mode": get("mode", "auto")
                       }
-
                   else:
                       return None
 
+                  fragment = unquote(u.fragment or "")
+                  tag = f"node-{index:04}"
+
                   return {
-                      "tag": f"node-{index:04}",
+                      "tag": tag,
                       "protocol": "vless",
                       "settings": {
                           "vnext": [{
-                              "address": server,
+                              "address": u.hostname,
                               "port": u.port,
                               "users": [user]
                           }]
                       },
-                      "streamSettings": stream
+                      "streamSettings": stream,
+                      "_name": fragment,
+                      "_source": line
                   }
-
               except (ValueError, TypeError):
                   return None
 
-          nodes = []
+          parsed = []
+          seen = set()
 
           for line in source.splitlines():
-              if line.strip().startswith("vless://"):
-                  node = parse_vless(line, len(nodes) + 1)
-                  if node:
-                      nodes.append(node)
+              if not line.strip().startswith("vless://"):
+                  continue
+              node = parse_vless(line, len(parsed) + 1)
+              if node and node["_source"] not in seen:
+                  seen.add(node["_source"])
+                  parsed.append(node)
 
-          if not nodes:
-              raise SystemExit(
-                  "No valid TLS/Reality VLESS servers; config not replaced."
-              )
+          if not parsed:
+              raise SystemExit("No valid TLS/Reality servers; old config preserved.")
+
+          # Keep names only for classification, not in final outbounds.
+          lte_nodes = []
+          ru_nodes = []
+          normal_nodes = []
+
+          for node in parsed:
+              name = node.pop("_name").lower()
+              node.pop("_source", None)
+
+              if re.search(r"(^|[^a-z])lte([^a-z]|$)", name):
+                  lte_nodes.append(node)
+              elif any(x in name for x in ("🇷🇺", "россия", "russia", "ru")):
+                  ru_nodes.append(node)
+                  normal_nodes.append(node)
+              else:
+                  normal_nodes.append(node)
+
+          # The general pool excludes LTE. The RU pool is independent.
+          groups = {
+              "auto": normal_nodes,
+              "auto-lte": lte_nodes,
+              "auto-ru": ru_nodes
+          }
+
+          outbounds = []
+          for group_nodes in groups.values():
+              for node in group_nodes:
+                  if not any(x["tag"] == node["tag"] for x in outbounds):
+                      outbounds.append(node)
+
+          outbounds.extend([
+              {"tag": "direct", "protocol": "freedom"},
+              {"tag": "block", "protocol": "blackhole"}
+          ])
+
+          balancers = []
+          for tag, group_nodes in groups.items():
+              if group_nodes:
+                  balancers.append({
+                      "tag": tag,
+                      "selector": [group_nodes[0]["tag"]],
+                      "fallbackTag": group_nodes[0]["tag"],
+                      "strategy": {"type": "leastPing"}
+                  })
+
+          # Use prefix selectors to include every node in each group.
+          # Tags are generated in group-specific form for unambiguous routing.
+          # Reassign tags based on their pools.
+          for tag, group_nodes in groups.items():
+              for i, node in enumerate(group_nodes, 1):
+                  node["tag"] = f"{tag}-{i:04}"
+
+          # Rebuild balancers after assigning unique group tags.
+          balancers = []
+          for tag, group_nodes in groups.items():
+              if group_nodes:
+                  balancers.append({
+                      "tag": tag,
+                      "selector": [tag + "-"],
+                      "fallbackTag": group_nodes[0]["tag"],
+                      "strategy": {"type": "leastPing"}
+                  })
+
+          # De-duplicate outbounds by tag after pool tagging.
+          outbounds = []
+          for group_nodes in groups.values():
+              for node in group_nodes:
+                  if not any(x["tag"] == node["tag"] for x in outbounds):
+                      outbounds.append(node)
+          outbounds.extend([
+              {"tag": "direct", "protocol": "freedom"},
+              {"tag": "block", "protocol": "blackhole"}
+          ])
+
+          rules = [
+              {
+                  "type": "field",
+                  "protocol": ["bittorrent"],
+                  "outboundTag": "direct"
+              }
+          ]
+
+          if groups["auto-ru"]:
+              rules.append({
+                  "type": "field",
+                  "domain": [
+                      "domain:youtube.com",
+                      "domain:googlevideo.com",
+                      "domain:ytimg.com",
+                      "domain:youtubei.googleapis.com"
+                  ],
+                  "balancerTag": "auto-ru"
+              })
+
+          if groups["auto"]:
+              rules.append({
+                  "type": "field",
+                  "domain": [
+                      "domain:2ip.ru",
+                      "domain:2ip.io",
+                      "domain:whoer.net",
+                      "domain:browserleaks.com",
+                      "domain:yoomoney.ru"
+                  ],
+                  "balancerTag": "auto"
+              })
+
+          rules.extend([
+              {
+                  "type": "field",
+                  "domain": [
+                      "geosite:category-ru",
+                      "domain:ru",
+                      "domain:su"
+                  ],
+                  "outboundTag": "direct"
+              },
+              {
+                  "type": "field",
+                  "ip": [
+                      "10.0.0.0/8",
+                      "100.64.0.0/10",
+                      "127.0.0.0/8",
+                      "169.254.0.0/16",
+                      "172.16.0.0/12",
+                      "192.168.0.0/16",
+                      "::1/128",
+                      "fc00::/7",
+                      "fe80::/10"
+                  ],
+                  "outboundTag": "direct"
+              }
+          ])
+
+          if groups["auto"]:
+              rules.append({
+                  "type": "field",
+                  "network": "tcp,udp",
+                  "balancerTag": "auto"
+              })
 
           config = {
               "remarks": "🇪🇺⚡Авто выбор",
@@ -162,10 +295,7 @@ jobs:
                       "port": 10808,
                       "listen": "127.0.0.1",
                       "protocol": "socks",
-                      "settings": {
-                          "udp": True,
-                          "auth": "noauth"
-                      },
+                      "settings": {"udp": True, "auth": "noauth"},
                       "sniffing": {
                           "enabled": True,
                           "routeOnly": False,
@@ -185,12 +315,9 @@ jobs:
                       }
                   }
               ],
-              "outbounds": nodes + [
-                  {"tag": "direct", "protocol": "freedom"},
-                  {"tag": "block", "protocol": "blackhole"}
-              ],
+              "outbounds": outbounds,
               "observatory": {
-                  "subjectSelector": ["node-"],
+                  "subjectSelector": ["auto-", "auto-lte-", "auto-ru-"],
                   "probeUrl": "https://www.gstatic.com/generate_204",
                   "probeInterval": "1m",
                   "enableConcurrency": True
@@ -198,62 +325,11 @@ jobs:
               "routing": {
                   "domainMatcher": "hybrid",
                   "domainStrategy": "IPIfNonMatch",
-                  "rules": [
-                      {
-                          "type": "field",
-                          "protocol": ["bittorrent"],
-                          "outboundTag": "direct"
-                      },
-                      {
-                          "type": "field",
-                          "domain": [
-                              "domain:2ip.ru",
-                              "domain:2ip.io",
-                              "domain:whoer.net",
-                              "domain:browserleaks.com",
-                              "domain:yoomoney.ru"
-                          ],
-                          "balancerTag": "auto"
-                      },
-                      {
-                          "type": "field",
-                          "domain": [
-                              "geosite:category-ru",
-                              "domain:ru",
-                              "domain:su"
-                          ],
-                          "outboundTag": "direct"
-                      },
-                      {
-                          "type": "field",
-                          "ip": [
-                              "10.0.0.0/8",
-                              "100.64.0.0/10",
-                              "127.0.0.0/8",
-                              "169.254.0.0/16",
-                              "172.16.0.0/12",
-                              "192.168.0.0/16",
-                              "::1/128",
-                              "fc00::/7",
-                              "fe80::/10"
-                          ],
-                          "outboundTag": "direct"
-                      },
-                      {
-                          "type": "field",
-                          "network": "tcp,udp",
-                          "balancerTag": "auto"
-                      }
-                  ],
-                  "balancers": [{
-                      "tag": "auto",
-                      "selector": ["node-"],
-                      "strategy": {"type": "leastPing"}
-                  }]
+                  "rules": rules,
+                  "balancers": balancers
               }
           }
 
-          # Записываем сначала временный файл.
           with open("config.json.tmp", "w", encoding="utf-8") as f:
               json.dump(config, f, ensure_ascii=False, indent=2)
               f.write("\n")
@@ -262,7 +338,11 @@ jobs:
               json.load(f)
 
           os.replace("config.json.tmp", "config.json")
-          print(f"Generated config.json: {len(nodes)} nodes")
+
+          print(
+              f"Total: {len(parsed)}, normal: {len(groups['auto'])}, "
+              f"LTE: {len(groups['auto-lte'])}, RU: {len(groups['auto-ru'])}"
+          )
           PYEOF
 
           python /tmp/build.py
@@ -271,11 +351,8 @@ jobs:
       - name: Commit config.json
         run: |
           git config user.name "github-actions[bot]"
-          git config user.email \
-            "41898282+github-actions[bot]@users.noreply.github.com"
-
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add config.json
-
           if ! git diff --cached --quiet; then
             git commit -m "Update Xray config"
             git push
