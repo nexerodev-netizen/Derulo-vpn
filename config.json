@@ -52,14 +52,6 @@
   ],
   "outbounds": [
     {
-      "tag": "direct",
-      "protocol": "freedom"
-    },
-    {
-      "tag": "block",
-      "protocol": "blackhole"
-    },
-    {
       "protocol": "vless",
       "settings": {
         "vnext": [
@@ -88,7 +80,8 @@
           "serviceName": "BookCatalog"
         }
       },
-      "tag": "auto-eu-0001 | 🇪🇺 tg:VLESSFORU"
+      "tag": "proxy-auto-0001",
+      "remarks": "🇪🇺 Авто выбор | tg:VLESSFORU"
     },
     {
       "protocol": "vless",
@@ -119,7 +112,8 @@
           "path": "/static/"
         }
       },
-      "tag": "auto-eu-0002 | 🇪🇺 tg:VLESSFORU"
+      "tag": "proxy-auto-0002",
+      "remarks": "🇪🇺 Авто выбор | tg:VLESSFORU"
     },
     {
       "protocol": "vless",
@@ -151,7 +145,8 @@
           "path": "/websocket"
         }
       },
-      "tag": "auto-eu-0003 | 🇪🇺 SNi"
+      "tag": "proxy-auto-0003",
+      "remarks": "🇪🇺 Авто выбор | SNi"
     },
     {
       "protocol": "vless",
@@ -182,7 +177,8 @@
           "serviceName": ""
         }
       },
-      "tag": "auto-eu-0004 | 🇪🇺 SNi"
+      "tag": "proxy-auto-0004",
+      "remarks": "🇪🇺 Авто выбор | SNi"
     },
     {
       "protocol": "vless",
@@ -213,7 +209,8 @@
           "serviceName": ""
         }
       },
-      "tag": "auto-eu-0005 | 🇪🇺 SNi"
+      "tag": "proxy-auto-0005",
+      "remarks": "🇪🇺 Авто выбор | SNi"
     },
     {
       "protocol": "vless",
@@ -242,7 +239,8 @@
           "shortId": "a9391e22"
         }
       },
-      "tag": "auto-eu-0006 | 🇪🇺 SNi"
+      "tag": "proxy-auto-0006",
+      "remarks": "🇪🇺 Авто выбор | SNi"
     },
     {
       "protocol": "vless",
@@ -271,7 +269,8 @@
           "shortId": "1ec515b87b68eab9"
         }
       },
-      "tag": "auto-eu-0007 | 🇪🇺 Бесплатный"
+      "tag": "proxy-auto-0007",
+      "remarks": "🇪🇺 Авто выбор | Бесплатный"
     },
     {
       "protocol": "vless",
@@ -300,7 +299,8 @@
           "shortId": "3446a8095e1788b4"
         }
       },
-      "tag": "auto-eu-0008 | 🇪🇺 Бесплатный"
+      "tag": "proxy-auto-0008",
+      "remarks": "🇪🇺 Авто выбор | Бесплатный"
     },
     {
       "protocol": "vless",
@@ -331,7 +331,8 @@
           "serviceName": ""
         }
       },
-      "tag": "auto-eu-0009 | 🇪🇺 Бесплатный"
+      "tag": "proxy-auto-0009",
+      "remarks": "🇪🇺 Авто выбор | Бесплатный"
     },
     {
       "protocol": "vless",
@@ -359,7 +360,8 @@
           "path": "/nmd2"
         }
       },
-      "tag": "auto-eu-0010 | 🇪🇺 Бесплатный"
+      "tag": "proxy-auto-0010",
+      "remarks": "🇪🇺 Авто выбор | Бесплатный"
     },
     {
       "protocol": "vless",
@@ -388,7 +390,8 @@
           "shortId": "d18f4e"
         }
       },
-      "tag": "auto-eu-0011 | 🇪🇺 Бесплатный"
+      "tag": "proxy-auto-0011",
+      "remarks": "🇪🇺 Авто выбор | Бесплатный"
     },
     {
       "protocol": "vless",
@@ -419,7 +422,8 @@
           "path": "/xhttp"
         }
       },
-      "tag": "auto-eu-0012 | 🇪🇺 Бесплатный"
+      "tag": "proxy-auto-0012",
+      "remarks": "🇪🇺 Авто выбор | Бесплатный"
     },
     {
       "protocol": "vless",
@@ -453,7 +457,8 @@
           "mode": "auto"
         }
       },
-      "tag": "auto-eu-0013 | 🇪🇺 Бесплатный"
+      "tag": "proxy-auto-0013",
+      "remarks": "🇪🇺 Авто выбор | Бесплатный"
     },
     {
       "protocol": "vless",
@@ -482,7 +487,8 @@
           "shortId": "6b4cf686eebb37b9"
         }
       },
-      "tag": "auto-eu-0014 | 🇪🇺 Бесплатный"
+      "tag": "proxy-auto-0014",
+      "remarks": "🇪🇺 Авто выбор | Бесплатный"
     },
     {
       "protocol": "vless",
@@ -514,7 +520,8 @@
           }
         }
       },
-      "tag": "auto-eu-0015 | 🇪🇺 Бесплатный"
+      "tag": "proxy-auto-0015",
+      "remarks": "🇪🇺 Авто выбор | Бесплатный"
     },
     {
       "protocol": "vless",
@@ -544,7 +551,8 @@
           "spiderX": "/"
         }
       },
-      "tag": "auto-eu-0016 | 🇪🇺 Бесплатный"
+      "tag": "proxy-auto-0016",
+      "remarks": "🇪🇺 Авто выбор | Бесплатный"
     },
     {
       "protocol": "vless",
@@ -576,7 +584,8 @@
           "mode": "auto"
         }
       },
-      "tag": "auto-eu-0017 | 🇪🇺 Бесплатный"
+      "tag": "proxy-auto-0017",
+      "remarks": "🇪🇺 Авто выбор | Бесплатный"
     },
     {
       "protocol": "vless",
@@ -608,7 +617,8 @@
           "mode": "packet-up"
         }
       },
-      "tag": "auto-eu-0018 | 🇪🇺 Бесплатный"
+      "tag": "proxy-auto-0018",
+      "remarks": "🇪🇺 Авто выбор | Бесплатный"
     },
     {
       "protocol": "vless",
@@ -637,7 +647,8 @@
           "shortId": "1ec515b87b68eab9"
         }
       },
-      "tag": "auto-eu-0019 | 🇪🇺 Бесплатный"
+      "tag": "proxy-auto-0019",
+      "remarks": "🇪🇺 Авто выбор | Бесплатный"
     },
     {
       "protocol": "vless",
@@ -668,7 +679,8 @@
           "mode": "auto"
         }
       },
-      "tag": "auto-eu-0020 | 🇪🇺 Бесплатный"
+      "tag": "proxy-auto-0020",
+      "remarks": "🇪🇺 Авто выбор | Бесплатный"
     },
     {
       "protocol": "vless",
@@ -700,7 +712,8 @@
           "mode": "packet-up"
         }
       },
-      "tag": "auto-eu-0021 | 🇪🇺 Бесплатный"
+      "tag": "proxy-auto-0021",
+      "remarks": "🇪🇺 Авто выбор | Бесплатный"
     },
     {
       "protocol": "vless",
@@ -731,7 +744,8 @@
           "path": "/xhttp"
         }
       },
-      "tag": "auto-eu-0022 | 🇪🇺 Бесплатный"
+      "tag": "proxy-auto-0022",
+      "remarks": "🇪🇺 Авто выбор | Бесплатный"
     },
     {
       "protocol": "vless",
@@ -760,7 +774,8 @@
           "shortId": "1ec515b87b68eab9"
         }
       },
-      "tag": "auto-eu-0023 | 🇪🇺 Бесплатный"
+      "tag": "proxy-auto-0023",
+      "remarks": "🇪🇺 Авто выбор | Бесплатный"
     },
     {
       "protocol": "vless",
@@ -789,7 +804,8 @@
           "shortId": "44aa59cc84b532ed"
         }
       },
-      "tag": "auto-eu-0024 | 🇪🇺 Бесплатный"
+      "tag": "proxy-auto-0024",
+      "remarks": "🇪🇺 Авто выбор | Бесплатный"
     },
     {
       "protocol": "vless",
@@ -818,7 +834,8 @@
           "shortId": "8fbdc8d37cc76852"
         }
       },
-      "tag": "auto-eu-0025 | 🇪🇺 Бесплатный"
+      "tag": "proxy-auto-0025",
+      "remarks": "🇪🇺 Авто выбор | Бесплатный"
     },
     {
       "protocol": "vless",
@@ -847,7 +864,8 @@
           "shortId": "8fbdc8d37cc76852"
         }
       },
-      "tag": "auto-eu-0026 | 🇪🇺 Бесплатный"
+      "tag": "proxy-auto-0026",
+      "remarks": "🇪🇺 Авто выбор | Бесплатный"
     },
     {
       "protocol": "vless",
@@ -876,7 +894,8 @@
           "shortId": "7271129440ade8fa"
         }
       },
-      "tag": "auto-eu-0027 | 🇪🇺 Бесплатный"
+      "tag": "proxy-auto-0027",
+      "remarks": "🇪🇺 Авто выбор | Бесплатный"
     },
     {
       "protocol": "vless",
@@ -908,7 +927,8 @@
           "mode": "auto"
         }
       },
-      "tag": "auto-eu-0028 | 🇪🇺 Бесплатный"
+      "tag": "proxy-auto-0028",
+      "remarks": "🇪🇺 Авто выбор | Бесплатный"
     },
     {
       "protocol": "vless",
@@ -940,7 +960,8 @@
           "serviceName": ""
         }
       },
-      "tag": "auto-eu-0029 | 🇪🇺 Бесплатный"
+      "tag": "proxy-auto-0029",
+      "remarks": "🇪🇺 Авто выбор | Бесплатный"
     },
     {
       "protocol": "vless",
@@ -972,7 +993,8 @@
           }
         }
       },
-      "tag": "auto-eu-0030 | 🇪🇺 Бесплатный"
+      "tag": "proxy-auto-0030",
+      "remarks": "🇪🇺 Авто выбор | Бесплатный"
     },
     {
       "protocol": "vless",
@@ -1001,7 +1023,8 @@
           "shortId": "9a26e586f8cadc07"
         }
       },
-      "tag": "auto-eu-0031 | 🇪🇺 Бесплатный"
+      "tag": "proxy-auto-0031",
+      "remarks": "🇪🇺 Авто выбор | Бесплатный"
     },
     {
       "protocol": "vless",
@@ -1036,7 +1059,8 @@
           }
         }
       },
-      "tag": "auto-eu-0032 | 🇪🇺 Бесплатный"
+      "tag": "proxy-auto-0032",
+      "remarks": "🇪🇺 Авто выбор | Бесплатный"
     },
     {
       "protocol": "vless",
@@ -1065,7 +1089,8 @@
           "shortId": "c71dd992a5c26702"
         }
       },
-      "tag": "auto-eu-0033 | 🇪🇺 Бесплатный"
+      "tag": "proxy-auto-0033",
+      "remarks": "🇪🇺 Авто выбор | Бесплатный"
     },
     {
       "protocol": "vless",
@@ -1094,7 +1119,8 @@
           "shortId": "9ab513f082d4c6e1"
         }
       },
-      "tag": "auto-eu-0034 | 🇪🇺 Бесплатный"
+      "tag": "proxy-auto-0034",
+      "remarks": "🇪🇺 Авто выбор | Бесплатный"
     },
     {
       "protocol": "vless",
@@ -1122,7 +1148,8 @@
           "serverName": "in1.vkusnews.com"
         }
       },
-      "tag": "auto-eu-0035 | 🇪🇺 Бесплатный"
+      "tag": "proxy-auto-0035",
+      "remarks": "🇪🇺 Авто выбор | Бесплатный"
     },
     {
       "protocol": "vless",
@@ -1150,7 +1177,8 @@
           "serverName": "ww.remnahoysry.ru"
         }
       },
-      "tag": "auto-eu-0036 | 🇪🇺 Бесплатный"
+      "tag": "proxy-auto-0036",
+      "remarks": "🇪🇺 Авто выбор | Бесплатный"
     },
     {
       "protocol": "vless",
@@ -1181,7 +1209,8 @@
           "path": "/xhttp"
         }
       },
-      "tag": "auto-eu-0037 | 🇪🇺 Бесплатный"
+      "tag": "proxy-auto-0037",
+      "remarks": "🇪🇺 Авто выбор | Бесплатный"
     },
     {
       "protocol": "vless",
@@ -1209,7 +1238,8 @@
           "serverName": "ozon.ru"
         }
       },
-      "tag": "auto-eu-0038 | 🇪🇺 Бесплатный"
+      "tag": "proxy-auto-0038",
+      "remarks": "🇪🇺 Авто выбор | Бесплатный"
     },
     {
       "protocol": "vless",
@@ -1241,7 +1271,8 @@
           }
         }
       },
-      "tag": "auto-eu-0039 | 🇪🇺 Бесплатный"
+      "tag": "proxy-auto-0039",
+      "remarks": "🇪🇺 Авто выбор | Бесплатный"
     },
     {
       "protocol": "vless",
@@ -1272,7 +1303,8 @@
           "serviceName": "898957bffc9a"
         }
       },
-      "tag": "auto-eu-0040 | 🇪🇺 Бесплатный"
+      "tag": "proxy-auto-0040",
+      "remarks": "🇪🇺 Авто выбор | Бесплатный"
     },
     {
       "protocol": "vless",
@@ -1301,7 +1333,8 @@
           "shortId": "15c87d0b99c0d132"
         }
       },
-      "tag": "auto-eu-0041 | 🇪🇺 Бесплатный"
+      "tag": "proxy-auto-0041",
+      "remarks": "🇪🇺 Авто выбор | Бесплатный"
     },
     {
       "protocol": "vless",
@@ -1329,7 +1362,8 @@
           "serverName": "lites.3apes.online"
         }
       },
-      "tag": "auto-eu-0042 | 🇪🇺 Бесплатный"
+      "tag": "proxy-auto-0042",
+      "remarks": "🇪🇺 Авто выбор | Бесплатный"
     },
     {
       "protocol": "vless",
@@ -1358,7 +1392,8 @@
           "shortId": "70b4ca"
         }
       },
-      "tag": "auto-eu-0043 | 🇪🇺 Бесплатный"
+      "tag": "proxy-auto-0043",
+      "remarks": "🇪🇺 Авто выбор | Бесплатный"
     },
     {
       "protocol": "vless",
@@ -1386,7 +1421,8 @@
           "serverName": "lite.3apes.online"
         }
       },
-      "tag": "auto-eu-0044 | 🇪🇺 Бесплатный"
+      "tag": "proxy-auto-0044",
+      "remarks": "🇪🇺 Авто выбор | Бесплатный"
     },
     {
       "protocol": "vless",
@@ -1418,7 +1454,8 @@
           "mode": "stream-one"
         }
       },
-      "tag": "auto-eu-0045 | 🇪🇺 Бесплатный"
+      "tag": "proxy-auto-0045",
+      "remarks": "🇪🇺 Авто выбор | Бесплатный"
     },
     {
       "protocol": "vless",
@@ -1450,7 +1487,8 @@
           "mode": "auto"
         }
       },
-      "tag": "auto-eu-0046 | 🇪🇺 Бесплатный"
+      "tag": "proxy-auto-0046",
+      "remarks": "🇪🇺 Авто выбор | Бесплатный"
     },
     {
       "protocol": "vless",
@@ -1479,7 +1517,8 @@
           "shortId": "a4b3ea902171ebc4"
         }
       },
-      "tag": "auto-eu-0047 | 🇪🇺 Бесплатный"
+      "tag": "proxy-auto-0047",
+      "remarks": "🇪🇺 Авто выбор | Бесплатный"
     },
     {
       "protocol": "vless",
@@ -1511,7 +1550,8 @@
           }
         }
       },
-      "tag": "auto-eu-0048 | 🇪🇺 Бесплатный"
+      "tag": "proxy-auto-0048",
+      "remarks": "🇪🇺 Авто выбор | Бесплатный"
     },
     {
       "protocol": "vless",
@@ -1539,7 +1579,8 @@
           "serverName": "lt.3apes.online"
         }
       },
-      "tag": "auto-eu-0049 | 🇪🇺 Бесплатный"
+      "tag": "proxy-auto-0049",
+      "remarks": "🇪🇺 Авто выбор | Бесплатный"
     },
     {
       "protocol": "vless",
@@ -1573,7 +1614,8 @@
           "mode": "auto"
         }
       },
-      "tag": "auto-eu-0050 | 🇪🇺 Бесплатный"
+      "tag": "proxy-auto-0050",
+      "remarks": "🇪🇺 Авто выбор | Бесплатный"
     },
     {
       "protocol": "vless",
@@ -1604,7 +1646,8 @@
           "path": "/xhttp"
         }
       },
-      "tag": "auto-eu-0051 | 🇪🇺 Бесплатный"
+      "tag": "proxy-auto-0051",
+      "remarks": "🇪🇺 Авто выбор | Бесплатный"
     },
     {
       "protocol": "vless",
@@ -1635,7 +1678,8 @@
           "path": "/xhttp"
         }
       },
-      "tag": "auto-eu-0052 | 🇪🇺 Бесплатный"
+      "tag": "proxy-auto-0052",
+      "remarks": "🇪🇺 Авто выбор | Бесплатный"
     },
     {
       "protocol": "vless",
@@ -1666,7 +1710,8 @@
           "serviceName": "fb78f1bc0355"
         }
       },
-      "tag": "auto-eu-0053 | 🇪🇺 Бесплатный"
+      "tag": "proxy-auto-0053",
+      "remarks": "🇪🇺 Авто выбор | Бесплатный"
     },
     {
       "protocol": "vless",
@@ -1694,7 +1739,8 @@
           "serverName": "cloudflare-dns.com"
         }
       },
-      "tag": "auto-eu-0054 | 🇪🇺 Бесплатный"
+      "tag": "proxy-auto-0054",
+      "remarks": "🇪🇺 Авто выбор | Бесплатный"
     },
     {
       "protocol": "vless",
@@ -1723,7 +1769,8 @@
           "shortId": "fd5b0def0660cdb1"
         }
       },
-      "tag": "auto-eu-0055 | 🇪🇺 Бесплатный"
+      "tag": "proxy-auto-0055",
+      "remarks": "🇪🇺 Авто выбор | Бесплатный"
     },
     {
       "protocol": "vless",
@@ -1754,7 +1801,8 @@
           "mode": "auto"
         }
       },
-      "tag": "auto-lte-0001 | 🇪🇺 LTE/5G 🏳️"
+      "tag": "proxy-lte-0001",
+      "remarks": "🇪🇺 Авто-LTE🏳️ | LTE/5G"
     },
     {
       "protocol": "vless",
@@ -1786,7 +1834,8 @@
           "path": "/websocket"
         }
       },
-      "tag": "auto-lte-0002 | 🇪🇺 LTE/5G 🏳️"
+      "tag": "proxy-lte-0002",
+      "remarks": "🇪🇺 Авто-LTE🏳️ | LTE/5G"
     },
     {
       "protocol": "vless",
@@ -1816,7 +1865,8 @@
           "mode": "packet-up"
         }
       },
-      "tag": "auto-lte-0003 | 🇪🇺 LTE/5G 🏳️"
+      "tag": "proxy-lte-0003",
+      "remarks": "🇪🇺 Авто-LTE🏳️ | LTE/5G"
     },
     {
       "protocol": "vless",
@@ -1847,7 +1897,8 @@
           "serviceName": ""
         }
       },
-      "tag": "auto-lte-0004 | 🇪🇺 LTE/5G 🏳️"
+      "tag": "proxy-lte-0004",
+      "remarks": "🇪🇺 Авто-LTE🏳️ | LTE/5G"
     },
     {
       "protocol": "vless",
@@ -1877,7 +1928,8 @@
           "serviceName": ""
         }
       },
-      "tag": "auto-lte-0005 | 🇪🇺 LTE/5G 🏳️"
+      "tag": "proxy-lte-0005",
+      "remarks": "🇪🇺 Авто-LTE🏳️ | LTE/5G"
     },
     {
       "protocol": "vless",
@@ -1907,7 +1959,8 @@
           "mode": "packet-up"
         }
       },
-      "tag": "auto-lte-0006 | 🇪🇺 LTE/5G 🏳️"
+      "tag": "proxy-lte-0006",
+      "remarks": "🇪🇺 Авто-LTE🏳️ | LTE/5G"
     },
     {
       "protocol": "vless",
@@ -1942,7 +1995,8 @@
           "mode": "auto"
         }
       },
-      "tag": "auto-lte-0007 | 🇪🇺 LTE/5G 🏳️"
+      "tag": "proxy-lte-0007",
+      "remarks": "🇪🇺 Авто-LTE🏳️ | LTE/5G"
     },
     {
       "protocol": "vless",
@@ -1972,7 +2026,8 @@
           "mode": "packet-up"
         }
       },
-      "tag": "auto-lte-0008 | 🇪🇺 LTE/5G 🏳️"
+      "tag": "proxy-lte-0008",
+      "remarks": "🇪🇺 Авто-LTE🏳️ | LTE/5G"
     },
     {
       "protocol": "vless",
@@ -2001,7 +2056,8 @@
           "shortId": "b208"
         }
       },
-      "tag": "auto-lte-0009 | 🇪🇺 LTE/5G 🏳️"
+      "tag": "proxy-lte-0009",
+      "remarks": "🇪🇺 Авто-LTE🏳️ | LTE/5G"
     },
     {
       "protocol": "vless",
@@ -2032,7 +2088,8 @@
           "mode": "auto"
         }
       },
-      "tag": "auto-lte-0010 | 🇪🇺 LTE/5G 🏳️"
+      "tag": "proxy-lte-0010",
+      "remarks": "🇪🇺 Авто-LTE🏳️ | LTE/5G"
     },
     {
       "protocol": "vless",
@@ -2066,7 +2123,8 @@
           "mode": "packet-up"
         }
       },
-      "tag": "auto-lte-0011 | 🇪🇺 LTE/5G 🏳️"
+      "tag": "proxy-lte-0011",
+      "remarks": "🇪🇺 Авто-LTE🏳️ | LTE/5G"
     },
     {
       "protocol": "vless",
@@ -2101,7 +2159,8 @@
           "mode": "auto"
         }
       },
-      "tag": "auto-lte-0012 | 🇪🇺 LTE/5G 🏳️"
+      "tag": "proxy-lte-0012",
+      "remarks": "🇪🇺 Авто-LTE🏳️ | LTE/5G"
     },
     {
       "protocol": "vless",
@@ -2131,7 +2190,8 @@
           "host": "fitindoor.net"
         }
       },
-      "tag": "auto-lte-0013 | 🇪🇺 LTE/5G 🏳️"
+      "tag": "proxy-lte-0013",
+      "remarks": "🇪🇺 Авто-LTE🏳️ | LTE/5G"
     },
     {
       "protocol": "vless",
@@ -2166,7 +2226,8 @@
           "mode": "auto"
         }
       },
-      "tag": "auto-lte-0014 | 🇪🇺 LTE/5G 🏳️"
+      "tag": "proxy-lte-0014",
+      "remarks": "🇪🇺 Авто-LTE🏳️ | LTE/5G"
     },
     {
       "protocol": "vless",
@@ -2200,7 +2261,16 @@
           "mode": "packet-up"
         }
       },
-      "tag": "auto-lte-0015 | 🇪🇺 LTE/5G 🏳️"
+      "tag": "proxy-lte-0015",
+      "remarks": "🇪🇺 Авто-LTE🏳️ | LTE/5G"
+    },
+    {
+      "tag": "direct",
+      "protocol": "freedom"
+    },
+    {
+      "tag": "block",
+      "protocol": "blackhole"
     }
   ],
   "routing": {
@@ -2259,7 +2329,7 @@
       {
         "tag": "🇪🇺 Авто выбор",
         "selector": [
-          "auto-eu-"
+          "proxy-auto-"
         ],
         "strategy": {
           "type": "leastPing"
@@ -2268,7 +2338,7 @@
       {
         "tag": "🇪🇺 Авто-LTE🏳️",
         "selector": [
-          "auto-lte-"
+          "proxy-lte-"
         ],
         "strategy": {
           "type": "leastPing"
@@ -2278,8 +2348,8 @@
   },
   "observatory": {
     "subjectSelector": [
-      "auto-eu-",
-      "auto-lte-"
+      "proxy-auto-",
+      "proxy-lte-"
     ],
     "probeUrl": "https://www.google.com/generate_204",
     "probeInterval": "1m",
