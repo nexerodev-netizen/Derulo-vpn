@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Generate config.json
@@ -27,122 +27,39 @@ jobs:
           import base64
           import json
           import re
+          import sys
           import urllib.request
-          from urllib.parse import urlsplit, parse_qs, unquote
           from pathlib import Path
+          from urllib.parse import urlsplit, parse_qs, unquote
 
-          URL = "https://sub.vlessfo.ru/vlessforu/working_configs.txt"
+          SUB_URL = "https://sub.vlessfo.ru/vlessforu/working_configs.txt"
 
-          req = urllib.request.Request(
-              URL,
-              headers={"User-Agent": "Mozilla/5.0"}
-          )
+          def download_subscription():
+              request = urllib.request.Request(
+                  SUB_URL,
+                  headers={"User-Agent": "Mozilla/5.0"}
+              )
+              with urllib.request.urlopen(request, timeout=60) as response:
+                  raw = response.read().decode("utf-8-sig", errors="replace")
 
-          with urllib.request.urlopen(req, timeout=60) as response:
-              raw = response.read().decode("utf-8-sig", errors="replace")
+              if "vless://" in raw.lower():
+                  return raw
 
-          text = raw
-          if "vless://" not in raw.lower():
+              compact = re.sub(r"\s+", "", raw)
               try:
                   decoded = base64.b64decode(
-                      re.sub(r"\s+", "", raw) +
-                      "=" * (-len(re.sub(r"\s+", "", raw)) % 4)
+                      compact + "=" * (-len(compact) % 4)
                   ).decode("utf-8-sig", errors="replace")
                   if "vless://" in decoded.lower():
-                      text = decoded
+                      return decoded
               except Exception:
                   pass
 
-          links = re.findall(r"vless://[^\s\"'<>]+", text, re.I)
+              return raw
 
-          TEMPLATE = {
-              "dns": {
-                  "servers": ["1.1.1.1", "1.0.0.1"],
-                  "queryStrategy": "UseIP"
-              },
-              "routing": {
-                  "rules": [
-                      {
-                          "type": "field",
-                          "protocol": ["bittorrent"],
-                          "outboundTag": "direct"
-                      },
-                      {
-                          "type": "field",
-                          "domain": [
-                              "domain:2ip.ru",
-                              "domain:2ip.io",
-                              "domain:whoer.net",
-                              "domain:yoomoney.ru",
-                              "domain:browserleaks.com"
-                          ],
-                          "outboundTag": "proxy"
-                      },
-                      {
-                          "type": "field",
-                          "domain": [
-                              "geosite:category-ru",
-                              "domain:ru",
-                              "domain:su"
-                          ],
-                          "outboundTag": "direct"
-                      },
-                      {
-                          "ip": [
-                              "10.0.0.0/8",
-                              "100.64.0.0/10",
-                              "127.0.0.0/8",
-                              "169.254.0.0/16",
-                              "172.16.0.0/12",
-                              "192.168.0.0/16",
-                              "::1/128",
-                              "fc00::/7",
-                              "fe80::/10"
-                          ],
-                          "type": "field",
-                          "outboundTag": "direct"
-                      }
-                  ],
-                  "domainMatcher": "hybrid",
-                  "domainStrategy": "IPIfNonMatch"
-              },
-              "inbounds": [
-                  {
-                      "tag": "socks",
-                      "port": 10808,
-                      "listen": "127.0.0.1",
-                      "protocol": "socks",
-                      "settings": {
-                          "udp": True,
-                          "auth": "noauth"
-                      },
-                      "sniffing": {
-                          "enabled": True,
-                          "routeOnly": False,
-                          "destOverride": ["http", "tls", "quic"]
-                      }
-                  },
-                  {
-                      "tag": "http",
-                      "port": 10809,
-                      "listen": "127.0.0.1",
-                      "protocol": "http",
-                      "settings": {
-                          "allowTransparent": False,
-                          "auth": "noauth"
-                      },
-                      "sniffing": {
-                          "enabled": True,
-                          "routeOnly": False,
-                          "destOverride": ["http", "tls", "quic"]
-                      }
-                  }
-              ]
-          }
-
-          def first(q, *keys, default=""):
-              for key in keys:
-                  values = q.get(key)
+          def get_param(query, *names, default=""):
+              for name in names:
+                  values = query.get(name)
                   if values and values[0] != "":
                       return values[0]
               return default
@@ -150,23 +67,26 @@ jobs:
           def parse_server(link):
               try:
                   link = link.strip().rstrip(",;)")
-                  u = urlsplit(link)
-                  if u.scheme.lower() != "vless":
+                  uri = urlsplit(link)
+
+                  if uri.scheme.lower() != "vless":
                       return None
 
-                  host = u.hostname
-                  port = u.port
-                  uid = unquote(u.username or "")
-                  name = unquote(u.fragment or "").strip()
+                  host = uri.hostname
+                  port = uri.port
+                  user_id = unquote(uri.username or "")
+                  name = unquote(uri.fragment or "").strip()
 
-                  if not host or not port or not uid:
+                  if not host or not port or not user_id:
                       return None
 
-                  q = parse_qs(u.query, keep_blank_values=True)
-                  network = first(q, "type", default="tcp").lower()
-                  security = first(q, "security", default="none").lower()
+                  query = parse_qs(uri.query, keep_blank_values=True)
+                  network = get_param(query, "type", default="tcp").lower()
+                  security = get_param(query, "security", default="none").lower()
 
-                  if network not in ("tcp", "ws", "grpc", "xhttp", "httpupgrade"):
+                  if network not in (
+                      "tcp", "ws", "grpc", "xhttp", "httpupgrade"
+                  ):
                       return None
 
                   stream = {
@@ -176,46 +96,63 @@ jobs:
 
                   if security == "tls":
                       tls = {}
-                      sni = first(q, "sni", "serverName")
-                      fp = first(q, "fp")
-                      alpn = first(q, "alpn")
+                      sni = get_param(query, "sni", "serverName")
+                      fp = get_param(query, "fp")
+                      alpn = get_param(query, "alpn")
+
                       if sni:
                           tls["serverName"] = sni
                       if fp:
                           tls["fingerprint"] = fp
                       if alpn:
                           tls["alpn"] = alpn.split(",")
+
                       stream["tlsSettings"] = tls
 
                   elif security == "reality":
-                      pbk = first(q, "pbk", "publicKey")
-                      if not pbk:
+                      public_key = get_param(query, "pbk", "publicKey")
+                      if not public_key:
                           return None
+
                       reality = {
-                          "publicKey": pbk,
-                          "fingerprint": first(q, "fp", default="chrome")
+                          "publicKey": public_key,
+                          "fingerprint": get_param(
+                              query, "fp", default="chrome"
+                          )
                       }
-                      sni = first(q, "sni", "serverName")
-                      sid = first(q, "sid", "shortId")
-                      spx = first(q, "spx")
+
+                      sni = get_param(query, "sni", "serverName")
+                      short_id = get_param(query, "sid", "shortId")
+                      spider_x = get_param(query, "spx")
+
                       if sni:
                           reality["serverName"] = sni
-                      if sid:
-                          reality["shortId"] = sid
-                      if spx:
-                          reality["spiderX"] = unquote(spx)
+                      if short_id:
+                          reality["shortId"] = short_id
+                      if spider_x:
+                          reality["spiderX"] = unquote(spider_x)
+
                       stream["realitySettings"] = reality
 
+                  elif security not in ("none", ""):
+                      return None
+
                   if network == "tcp":
-                      header = first(q, "headerType", default="none")
+                      header_type = get_param(
+                          query, "headerType", default="none"
+                      )
                       stream["tcpSettings"] = (
-                          {} if header == "none" else
-                          {"header": {"type": header}}
+                          {} if header_type == "none"
+                          else {"header": {"type": header_type}}
                       )
 
                   elif network == "ws":
-                      ws = {"path": unquote(first(q, "path", default="/"))}
-                      ws_host = first(q, "host")
+                      ws = {
+                          "path": unquote(
+                              get_param(query, "path", default="/")
+                          )
+                      }
+                      ws_host = get_param(query, "host")
                       if ws_host:
                           ws["headers"] = {"Host": ws_host}
                       stream["wsSettings"] = ws
@@ -223,39 +160,43 @@ jobs:
                   elif network == "grpc":
                       stream["grpcSettings"] = {
                           "serviceName": unquote(
-                              first(q, "serviceName", "path")
+                              get_param(query, "serviceName", "path")
                           )
                       }
 
                   elif network == "xhttp":
-                      xhttp = {}
-                      path = first(q, "path")
-                      host_header = first(q, "host")
-                      mode = first(q, "mode")
+                      settings = {}
+                      path = get_param(query, "path")
+                      host_header = get_param(query, "host")
+                      mode = get_param(query, "mode")
+
                       if path:
-                          xhttp["path"] = unquote(path)
+                          settings["path"] = unquote(path)
                       if host_header:
-                          xhttp["host"] = host_header
+                          settings["host"] = host_header
                       if mode:
-                          xhttp["mode"] = mode
-                      stream["xhttpSettings"] = xhttp
+                          settings["mode"] = mode
+
+                      stream["xhttpSettings"] = settings
 
                   elif network == "httpupgrade":
-                      upgrade = {
-                          "path": unquote(first(q, "path", default="/"))
+                      settings = {
+                          "path": unquote(
+                              get_param(query, "path", default="/")
+                          )
                       }
-                      ws_host = first(q, "host")
-                      if ws_host:
-                          upgrade["host"] = ws_host
-                      stream["httpupgradeSettings"] = upgrade
+                      host_header = get_param(query, "host")
+                      if host_header:
+                          settings["host"] = host_header
+                      stream["httpupgradeSettings"] = settings
 
                   user = {
-                      "id": uid,
-                      "encryption": first(q, "encryption", default="none")
+                      "id": user_id,
+                      "encryption": get_param(
+                          query, "encryption", default="none"
+                      ),
+                      "flow": get_param(query, "flow")
                   }
-                  flow = first(q, "flow")
-                  if flow:
-                      user["flow"] = flow
 
                   outbound = {
                       "tag": "proxy",
@@ -270,77 +211,202 @@ jobs:
                       "streamSettings": stream
                   }
 
-                  return {"name": name or f"{host}:{port}", "outbound": outbound}
-              except Exception:
+                  return {
+                      "name": name or f"{host}:{port}",
+                      "outbound": outbound
+                  }
+
+              except (ValueError, TypeError, KeyError):
                   return None
 
-          def make_profile(server, group):
-              profile = json.loads(json.dumps(TEMPLATE))
-              profile["outbounds"] = [
-                  server["outbound"],
-                  {"tag": "direct", "protocol": "freedom"},
-                  {"tag": "block", "protocol": "blackhole"}
-              ]
-              profile["remarks"] = f"{group} | {server['name']}"
-              profile["log"] = {
-                  "access": "/storage/emulated/0/Android/data/com.happproxy/files/assets/logs/access/access_log.txt",
-                  "error": "/storage/emulated/0/Android/data/com.happproxy/files/assets/logs/error/error_log.txt"
+          def make_profile(server, remarks):
+              return {
+                  "dns": {
+                      "servers": [
+                          "1.1.1.1",
+                          "1.0.0.1"
+                      ],
+                      "queryStrategy": "UseIP"
+                  },
+                  "routing": {
+                      "rules": [
+                          {
+                              "type": "field",
+                              "protocol": ["bittorrent"],
+                              "outboundTag": "direct"
+                          },
+                          {
+                              "type": "field",
+                              "domain": [
+                                  "domain:2ip.ru",
+                                  "domain:2ip.io",
+                                  "domain:whoer.net",
+                                  "domain:yoomoney.ru",
+                                  "domain:browserleaks.com"
+                              ],
+                              "outboundTag": "proxy"
+                          },
+                          {
+                              "type": "field",
+                              "domain": [
+                                  "geosite:category-ru",
+                                  "domain:ru",
+                                  "domain:su"
+                              ],
+                              "outboundTag": "direct"
+                          },
+                          {
+                              "ip": [
+                                  "10.0.0.0/8",
+                                  "100.64.0.0/10",
+                                  "127.0.0.0/8",
+                                  "169.254.0.0/16",
+                                  "172.16.0.0/12",
+                                  "192.168.0.0/16",
+                                  "::1/128",
+                                  "fc00::/7",
+                                  "fe80::/10"
+                              ],
+                              "type": "field",
+                              "outboundTag": "direct"
+                          }
+                      ],
+                      "domainMatcher": "hybrid",
+                      "domainStrategy": "IPIfNonMatch"
+                  },
+                  "inbounds": [
+                      {
+                          "tag": "socks",
+                          "port": 10808,
+                          "listen": "127.0.0.1",
+                          "protocol": "socks",
+                          "settings": {
+                              "udp": True,
+                              "auth": "noauth"
+                          },
+                          "sniffing": {
+                              "enabled": True,
+                              "routeOnly": False,
+                              "destOverride": ["http", "tls", "quic"]
+                          }
+                      },
+                      {
+                          "tag": "http",
+                          "port": 10809,
+                          "listen": "127.0.0.1",
+                          "protocol": "http",
+                          "settings": {
+                              "allowTransparent": False,
+                              "auth": "noauth"
+                          },
+                          "sniffing": {
+                              "enabled": True,
+                              "routeOnly": False,
+                              "destOverride": ["http", "tls", "quic"]
+                          }
+                      }
+                  ],
+                  "outbounds": [
+                      server["outbound"],
+                      {
+                          "tag": "direct",
+                          "protocol": "freedom"
+                      },
+                      {
+                          "tag": "block",
+                          "protocol": "blackhole"
+                      }
+                  ],
+                  "remarks": remarks,
+                  "log": {
+                      "access": "/storage/emulated/0/Android/data/com.happproxy/files/assets/logs/access/access_log.txt",
+                      "error": "/storage/emulated/0/Android/data/com.happproxy/files/assets/logs/error/error_log.txt"
+                  }
               }
-              return profile
 
-          profiles = []
-          seen = set()
-
-          for link in links:
-              server = parse_server(link)
-              if not server:
-                  continue
-
-              key = json.dumps(server["outbound"], sort_keys=True, ensure_ascii=False)
-              if key in seen:
-                  continue
-              seen.add(key)
-
-              name = server["name"]
-              groups = []
-
-              if "lte" in name.lower():
-                  groups.append("🇪🇺 Авто-LTE🏳️")
-              else:
-                  groups.append("🇪🇺 Авто выбор")
-
-              if "🇷🇺" in name:
-                  groups.append("🇪🇺 Авто-YouTube без рекламы")
-
-              for group in groups:
-                  profiles.append(make_profile(server, group))
-
-          if not profiles:
-              raise SystemExit(
-                  "Не найдено ни одного пригодного VLESS-сервера. "
-                  "Существующий config.json не изменён."
+          def main():
+              text = download_subscription()
+              links = re.findall(
+                  r"vless://[^\s\"'<>]+",
+                  text,
+                  flags=re.IGNORECASE
               )
 
-          # Keep the requested format: JSON objects concatenated one after another.
-          output = "\n".join(
-              json.dumps(profile, ensure_ascii=False, indent=2)
-              for profile in profiles
-          ) + "\n"
+              profiles = []
+              seen = set()
 
-          Path("config.json").write_text(output, encoding="utf-8")
-          print(f"Created {len(profiles)} profiles in config.json")
+              for link in links:
+                  server = parse_server(link)
+                  if not server:
+                      continue
+
+                  identity = json.dumps(
+                      server["outbound"],
+                      ensure_ascii=False,
+                      sort_keys=True
+                  )
+
+                  if identity in seen:
+                      continue
+                  seen.add(identity)
+
+                  original_name = server["name"]
+
+                  if "lte" in original_name.lower():
+                      group = "🇪🇺 Авто-LTE🏳️"
+                  else:
+                      group = "🇪🇺 Авто выбор"
+
+                  profiles.append(
+                      make_profile(
+                          server,
+                          f"{group} | {original_name}"
+                      )
+                  )
+
+                  if "🇷🇺" in original_name:
+                      profiles.append(
+                          make_profile(
+                              server,
+                              "🇪🇺 Авто-YouTube без рекламы"
+                              f" | {original_name}"
+                          )
+                      )
+
+              if not profiles:
+                  sys.exit(
+                      "Не найдено подходящих VLESS-серверов. "
+                      "Существующий config.json не изменён."
+                  )
+
+              # Записываем объекты подряд, без массива — как просил пользователь.
+              output = "\n".join(
+                  json.dumps(profile, ensure_ascii=False, indent=2)
+                  for profile in profiles
+              ) + "\n"
+
+              Path("config.json").write_text(
+                  output,
+                  encoding="utf-8"
+              )
+
+              print(f"Создано профилей: {len(profiles)}")
+
+          if __name__ == "__main__":
+              main()
           PY
 
           python /tmp/generate.py
 
-      - name: Commit and push
+      - name: Commit config.json
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add config.json
+
+          git add -- config.json
 
           if git diff --cached --quiet; then
-            echo "No changes."
+            echo "config.json не изменился."
             exit 0
           fi
 
